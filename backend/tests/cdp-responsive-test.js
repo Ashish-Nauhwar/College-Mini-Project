@@ -7,10 +7,12 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const app = require('../server');
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const DEBUG_PORT = 9222;
-const BASE_URL = 'http://localhost:3000';
+let BASE_URL = 'http://localhost:3000';
 
 const VIEWPORTS = [
   { name: 'Mobile 320px (iPhone SE 1st / Android mini)', width: 320, height: 600, mobile: true },
@@ -107,6 +109,30 @@ async function main() {
   console.log('===============================================================');
   console.log('   FEEDBACKHUB MANDATORY RESPONSIVE DESIGN ACCEPTANCE TEST');
   console.log('===============================================================\n');
+
+  if (!fs.existsSync(EDGE_PATH)) {
+    console.log('[STATUS: SKIPPED]');
+    console.log(`Microsoft Edge not found at ${EDGE_PATH}. Responsive browser tests require Microsoft Edge or Chrome.`);
+    return;
+  }
+
+  // Check if server is running on port 3000, else spin up ephemeral server
+  let testServer = null;
+  try {
+    const healthCheck = await fetch('http://localhost:3000/api/health');
+    if (!healthCheck.ok) throw new Error();
+    BASE_URL = 'http://localhost:3000';
+  } catch (_) {
+    await new Promise((resolve) => {
+      testServer = http.createServer(app);
+      testServer.listen(0, '127.0.0.1', () => {
+        const port = testServer.address().port;
+        BASE_URL = `http://127.0.0.1:${port}`;
+        resolve();
+      });
+    });
+    console.log(`[0] Spun up test server at ${BASE_URL}`);
+  }
 
   // Create temporary profile directory for Edge
   const profileDir = path.join(__dirname, '..', 'data', 'test-edge-profile');
@@ -603,7 +629,10 @@ async function main() {
     failedCount++;
   } finally {
     if (client) client.close();
-    edgeProc.kill();
+    if (edgeProc) edgeProc.kill();
+    if (testServer) {
+      await new Promise(r => testServer.close(r));
+    }
     // Clean up test profile dir
     try {
       fs.rmSync(profileDir, { recursive: true, force: true });

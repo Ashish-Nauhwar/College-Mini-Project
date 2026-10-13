@@ -4,10 +4,20 @@ const { createQrSvg, createQrDataUri } = require('../utils/qr-generator');
 
 function resolvePublicUrl(inputUrl, req) {
   if (!inputUrl) return '';
+  const publicBase = process.env.PUBLIC_APP_URL ? process.env.PUBLIC_APP_URL.replace(/\/$/, '') : null;
+
   if (inputUrl.startsWith('http://') || inputUrl.startsWith('https://')) {
+    if (publicBase) {
+      try {
+        const parsed = new URL(inputUrl);
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          return `${publicBase}${parsed.pathname}${parsed.search}`;
+        }
+      } catch (_) {}
+    }
     return inputUrl;
   }
-  const baseUrl = process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`;
+  const baseUrl = publicBase || `${req.protocol}://${req.get('host')}`;
   const cleanPath = inputUrl.startsWith('/') ? inputUrl : `/${inputUrl}`;
   return `${baseUrl.replace(/\/$/, '')}${cleanPath}`;
 }

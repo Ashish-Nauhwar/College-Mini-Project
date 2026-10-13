@@ -7,12 +7,33 @@ const mongoose = require('mongoose');
 const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('./models');
 const configDb = require('./config/db');
 
-let mockDbMode = process.env.TEST_MOCK_DB === 'true';
+function isProduction() {
+  return (process.env.NODE_ENV || 'development').trim().toLowerCase() === 'production';
+}
+
+// In production, mock DB mode is strictly prohibited under all circumstances
+let mockDbMode = !isProduction() && process.env.TEST_MOCK_DB === 'true';
+
+if (isProduction() && process.env.TEST_MOCK_DB === 'true') {
+  console.error('\n===============================================================');
+  console.error('[CRITICAL SECURITY ERROR] TEST_MOCK_DB=true is strictly forbidden in production (NODE_ENV=production).');
+  console.error('Refusing to start with mock persistence in production environment.');
+  console.error('===============================================================\n');
+  throw new Error('[Security Error] Mock database mode cannot be activated when NODE_ENV=production.');
+}
 
 function isDbConnected() {
+  if (isProduction()) {
+    return configDb.isDbConnected();
+  }
   if (mockDbMode) return true;
   return configDb.isDbConnected();
 }
+
+function isPersistentDbConnected() {
+  return configDb.isDbConnected();
+}
+
 const mockStore = {
   users: new Map(),
   businesses: new Map(),
@@ -23,6 +44,9 @@ const mockStore = {
 };
 
 function enableMockDb(enable = true) {
+  if (enable && isProduction()) {
+    throw new Error('[Security Error] Mock database mode cannot be enabled when NODE_ENV=production.');
+  }
   mockDbMode = Boolean(enable);
 }
 
@@ -40,8 +64,15 @@ function isMockDbActive() {
 }
 
 function checkConnection() {
-  if (mockDbMode) return;
-  if (!isDbConnected()) {
+  if (mockDbMode) {
+    if (isProduction()) {
+      const error = new Error('[Security Error] In-memory mock storage is forbidden in production.');
+      error.statusCode = 500;
+      throw error;
+    }
+    return;
+  }
+  if (!configDb.isDbConnected()) {
     const isUriConfigured = Boolean(process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('<username>'));
     const message = isUriConfigured
       ? 'Database service temporarily unavailable. The database is currently reconnecting or unreachable. Please try again shortly.'
@@ -469,5 +500,6 @@ module.exports = {
   deleteFeedback,
   logAudit,
   getAuditLogs,
-  isDbConnected
+  isDbConnected,
+  isPersistentDbConnected
 };

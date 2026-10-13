@@ -5,13 +5,15 @@ services:
     name: feedbackhub
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "22"
       - key: ENABLE_DEMO_MODE
         value: "false"
       - key: PORT

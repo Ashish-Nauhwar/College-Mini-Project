@@ -38,12 +38,27 @@ async function runFinalSmokeTest() {
   console.log('       FEEDBACKHUB FINAL RELEASE SMOKE TEST (TASK 6)           ');
   console.log('===============================================================\n');
 
+  const testUri = process.env.TEST_MONGODB_URI;
+
+  if (!testUri || testUri.includes('<username>') || testUri.includes('<password>')) {
+    console.log('[STATUS: SKIPPED]');
+    console.log('Live MongoDB Atlas smoke tests were skipped because TEST_MONGODB_URI is not configured.');
+    console.log('To run this suite against a live database without touching production/development:');
+    console.log('  1. Create a disposable test database in MongoDB Atlas.');
+    console.log('  2. Set TEST_MONGODB_URI in backend/.env:');
+    console.log('     TEST_MONGODB_URI=mongodb+srv://<user>:<pwd>@cluster0.mongodb.net/feedbackhub_test?retryWrites=true&w=majority\n');
+    return { success: true, skipped: true };
+  }
+
   // Step 1: Start Application Server & Connect Database
-  console.log('[Step 1] Connecting to MongoDB Atlas...');
-  const connected = await connectDB();
-  assert.strictEqual(connected, true, 'Database connection must succeed');
+  console.log('[Step 1] Connecting to MongoDB Atlas Test Database...');
+  const mongoose = require('mongoose');
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.close();
+  }
+  await mongoose.connect(testUri, { serverSelectionTimeoutMS: 5000 });
   assert.strictEqual(isDbConnected(), true, 'isDbConnected() must return true');
-  console.log('  ✓ Connected to MongoDB Atlas successfully');
+  console.log('  ✓ Connected to MongoDB Atlas test database successfully');
 
   let server;
   let BASE_URL;
@@ -320,7 +335,11 @@ async function runFinalSmokeTest() {
   console.log('===============================================================\n');
 }
 
-runFinalSmokeTest().catch((err) => {
-  console.error('\n[SMOKE TEST FAILED]:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  runFinalSmokeTest().catch((err) => {
+    console.error('\n[SMOKE TEST FAILED]:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = runFinalSmokeTest;

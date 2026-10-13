@@ -21,6 +21,7 @@ if (activeEnvPath) {
 const express = require('express');
 const cors = require('cors');
 const { connectDB, isDbConnected } = require('./src/config/db');
+const db = require('./src/db');
 
 const authRoutes = require('./src/routes/auth');
 const locationRoutes = require('./src/routes/locations');
@@ -89,12 +90,19 @@ app.use(express.static(FRONTEND_DIR));
 
 // Health check endpoint (Accurately reports database readiness; returns 503 if disconnected)
 app.get('/api/health', (req, res) => {
-  const ready = isDbConnected();
-  const statusCode = ready ? 200 : 503;
+  const isProd = NODE_ENV === 'production';
+  const realDbReady = isDbConnected();
+  const mockActive = db.isMockDbActive();
+
+  // In production, ready ONLY if genuine persistent MongoDB is connected and mock is NOT active
+  const isReady = isProd ? (realDbReady && !mockActive) : (realDbReady || mockActive);
+  const statusCode = isReady ? 200 : 503;
+
   return res.status(statusCode).json({
-    status: ready ? 'healthy' : 'degraded',
-    ready,
-    database: ready ? 'connected' : 'disconnected',
+    status: isReady ? 'healthy' : 'degraded',
+    ready: isReady,
+    database: realDbReady ? 'connected' : (mockActive ? 'mock' : 'disconnected'),
+    storage: mockActive ? 'in-memory-mock' : (realDbReady ? 'mongodb' : 'none'),
     uptime: `${Math.floor(process.uptime())}s`,
     environment: NODE_ENV,
     pid: process.pid
@@ -163,6 +171,17 @@ if (require.main === module) {
     console.log(`[Startup] Listening on: http://0.0.0.0:${PORT} [PID: ${process.pid}]`);
     console.log(`[Startup] Environment: ${NODE_ENV} (.env: ${activeEnvPath || 'System environment'})`);
     console.log(`[Startup] MongoDB URI: ${process.env.MONGODB_URI ? 'Configured' : 'NOT CONFIGURED'}`);
+
+    if (NODE_ENV === 'production') {
+      if (process.env.TEST_MOCK_DB === 'true' || db.isMockDbActive()) {
+        console.error('\n===============================================================');
+        console.error('[FATAL CONFIGURATION ERROR] Mock database mode cannot be activated in production (NODE_ENV=production).');
+        console.error('Production environments require a genuine MongoDB Atlas connection. Exiting.');
+        console.error('===============================================================\n');
+        server.close(() => process.exit(1));
+        return;
+      }
+    }
 
     // Attempt MongoDB connection after successful port binding
     const dbConnected = await connectDB();

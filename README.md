@@ -6,6 +6,7 @@ FeedbackHub is a production-ready, mobile-first customer and institutional feedb
 
 ## 🌟 Architecture & Technology Stack
 
+* **Runtime**: **Node.js 22 LTS** (minimum engine requirement: `>=20.19.0` for Mongoose 9 compatibility).
 * **Frontend**: Vanilla JavaScript (ES6+), Semantic HTML5, CSS Grid & Flexbox design system.
   * Mobile-first responsive layout verified across **320px to 1440px+** viewports.
   * Zero external JavaScript framework dependencies.
@@ -37,7 +38,7 @@ NODE_ENV=development
 # Replace with your actual cluster credentials
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/feedbackhub?retryWrites=true&w=majority
 
-# Optional: Dedicated Disposable Database for Live Integration Tests
+# Optional: Dedicated Disposable Database for Live Integration & Smoke Tests
 # TEST_MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/feedbackhub_test?retryWrites=true&w=majority
 
 # JWT Authentication Secret (Must be >= 32 characters in production)
@@ -63,24 +64,34 @@ ENABLE_DEMO_MODE=false
 
 ## 🚀 Quick Start Guide
 
-### 1. Install Dependencies
+### 1. Prerequisites & Node Version
+* **Node.js**: `22.x` (LTS recommended, minimum `>=20.19.0`)
+* **npm**: `10.x` or `11.x`
+* Verify installed versions:
+  ```bash
+  node -v
+  npm -v
+  ```
+
+### 2. Clean Installation via Lockfile
+To install exact pinned dependencies cleanly:
 ```bash
-npm install
+npm ci
 ```
 
-### 2. Configure MongoDB Atlas
+### 3. Configure MongoDB Atlas
 Update `backend/.env` with your active MongoDB Atlas connection URI:
 ```env
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/feedbackhub?retryWrites=true&w=majority
 ```
 
-### 3. Bootstrap Production Super-Admin (Secure CLI)
-To provision an initial super-administrator in production without using hardcoded demo passwords:
+### 4. Bootstrap Production Super-Admin (Secure CLI)
+To provision an initial super-administrator without using hardcoded demo passwords:
 ```bash
 npm run bootstrap:superadmin -- admin@yourdomain.com StrongPassword@2026 "Site Admin"
 ```
 
-### 4. Seed Starter Data (Safe & Non-Destructive by Default)
+### 5. Seed Starter Data (Safe & Non-Destructive by Default)
 Populate starter demo accounts and template forms in development:
 ```bash
 npm run seed
@@ -91,10 +102,10 @@ npm run seed
 * **Destructive Reset Guard**: Destructive seeding requires `ALLOW_DESTRUCTIVE_SEED=true` **AND** a database name verified to contain development/test keywords (`test`, `dev`, `local`). Destructive operations against unrecognized or production databases are refused.
 * **Explicit Precedence**: Uses `MONGODB_URI` from the environment or an explicitly passed URI; it never silently falls back to `TEST_MONGODB_URI`.
 
-### 5. Start the Application
+### 6. Start the Application
 ```bash
 npm start
-# Server listens at http://localhost:3000
+# Server binds to 0.0.0.0 and listens at http://localhost:3000
 ```
 
 ---
@@ -202,49 +213,70 @@ Before starting the server or running integration tests, run the built-in system
 ```bash
 npm run diagnose
 ```
-Reports environment file detection, port 3000 availability (preventing `EADDRINUSE` conflicts), masked MongoDB Atlas connection test, and static asset integrity.
+Reports environment file detection, port availability, active instance health detection, masked MongoDB Atlas connection test, and static asset integrity.
 
 ### Run All Automated Suites
 ```bash
 npm test
 ```
-Executes all 9 automated suites with full summary reporting:
+Executes all automated suites with comprehensive summary accounting:
 ```
-======================================================
-              AUTOMATED VERIFICATION SUMMARY          
-======================================================
-1. Security & Auth Isolation [Isolated Mock DB]: PASS ✓
-2. NPS & Rating Formula Correctness [Isolated Mock DB]: PASS ✓
-3. Injection Hardening & Validation [Isolated Mock DB]: PASS ✓
-4. College Academic 12-Step E2E Flow [Isolated Mock DB]: PASS ✓
-5. Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]: PASS ✓
-6. Phase 4 Data Safety & DB Protection [Safety Unit Tests]: PASS ✓
-7. Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]: PASS ✓
-8. Phase 7 Signup & Routing Resilience [App & DB Check]: PASS ✓
-9. Real MongoDB Atlas Integration [Live Database]: SKIPPED (no TEST_MONGODB_URI configured)
-======================================================
+=============================================================================
+              FEEDBACKHUB AUTOMATED VERIFICATION SUMMARY                     
+=============================================================================
+ 1. Security & Auth Isolation [Isolated Mock DB]                            : PASS ✓
+ 2. NPS & Rating Formula Correctness [Isolated Mock DB]                     : PASS ✓
+ 3. Injection Hardening & Validation [Isolated Mock DB]                     : PASS ✓
+ 4. College Academic 12-Step E2E Flow [Isolated Mock DB]                    : PASS ✓
+ 5. Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]              : PASS ✓
+ 6. Phase 4 Data Safety & DB Protection [Safety Unit Tests]                 : PASS ✓
+ 7. Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]                     : PASS ✓
+ 8. Phase 7 Signup & Routing Resilience [App & DB Check]                    : PASS ✓
+ 9. Phase 8 Production Safety & E2E Verification [Express App & Safety Check]: PASS ✓
+10. Real MongoDB Atlas Integration [Live Database]                          : SKIPPED (requires TEST_MONGODB_URI configured)
+11. Final 13-Step Release Smoke Verification [Live Database]                : SKIPPED (requires TEST_MONGODB_URI configured)
+=============================================================================
+Verification Tally: 9 Passed | 2 Skipped (Live DB optional) | 0 Failed
+=============================================================================
 ```
 
 ### Individual Test Suites
 ```bash
-# Master Suite (All 9 Suites)
+# Master Test Runner (All Suites)
 npm test
 
-# Phase 7 Signup, Routing & Blank-Screen Resilience
+# Phase 8 Production Safety, Mock DB Prohibition & E2E Registration
+npm run test:phase8
+
+# Phase 7 Signup, Routing Resilience & Blank-Screen Prevention
 npm run test:phase7
 
-# Phase 5 RBAC, Lifecycle & Production Safety
+# Phase 5 RBAC, Lifecycle Transitions & Production Safety
 npm run test:phase5
 
 # Security, Auth & RBAC Isolation
 npm run test:security
 
-# Real MongoDB Atlas Integration (Requires TEST_MONGODB_URI)
+# Real MongoDB Atlas Live Integration (Requires TEST_MONGODB_URI)
 npm run test:integration
+
+# Final 13-Step Release Smoke Verification (Requires TEST_MONGODB_URI)
+npm run test:smoke
 
 # Multi-Device Responsive UI Verification (320px - 1440px)
 npm run test:responsive
 ```
+
+> [!NOTE]
+> Tests that create, mutate, or teardown database records require `TEST_MONGODB_URI` pointing to a disposable database (e.g. `mongodb+srv://.../feedbackhub_test`). If unconfigured, live database suites cleanly report `SKIPPED` rather than failing or modifying production/development data.
+
+---
+
+## 🚫 Mock Database Prohibition in Production
+
+* **Strict Refusal**: `TEST_MOCK_DB=true` is strictly prohibited when `NODE_ENV=production`. If activated, the backend fails startup immediately with a fatal security configuration error.
+* **Health Check Honesty**: In production, `/api/health` reports `status: degraded`, `ready: false`, and HTTP 503 if persistent MongoDB is disconnected or if in-memory mock storage is active. It only reports `ready: true` when genuine MongoDB Atlas persistence is active (`readyState === 1`).
+* **Zero Silent Fallback**: The database layer never silently falls back to in-memory mock data or JSON files if MongoDB becomes unreachable. It throws an explicit HTTP 503 error with an informative status message.
 
 ---
 
@@ -253,15 +285,16 @@ npm run test:responsive
 FeedbackHub is architected to deploy seamlessly as a single unified **Render Web Service** that serves both the Express backend API and the responsive vanilla frontend on the same origin.
 
 ### 1. Blueprint Deployment (`render.yaml`)
-A verified [`render.yaml`](file:///c:/Users/itsya/OneDrive/Desktop/vide%20coding/Feedback%20Project/render.yaml) blueprint is included in the project root. To deploy via Blueprint:
+A verified [`render.yaml`](file:///c:/Users/itsya/OneDrive/Desktop/vide%20coding/Feedback%20Project/render.yaml) blueprint is included in the project root:
 1. Push your repository to GitHub.
 2. In the [Render Dashboard](https://dashboard.render.com), click **New +** > **Blueprint**.
 3. Select your repository. Render will automatically configure the service using `render.yaml`.
 
 ### 2. Manual Service Configuration
-Alternatively, create a new **Web Service** manually:
+Alternatively, create a new **Web Service** manually in Render:
 * **Environment**: `Node`
-* **Build Command**: `npm install`
+* **Node Version**: `22` (declare `NODE_VERSION=22` in environment variables)
+* **Build Command**: `npm ci`
 * **Start Command**: `npm start`
 * **Health Check Path**: `/api/health`
 * **Auto-Deploy**: `Yes`
@@ -269,15 +302,16 @@ Alternatively, create a new **Web Service** manually:
 ### 3. Required Production Environment Variables
 Configure the following environment variables in your Render service settings:
 
-| Variable | Description | Example / Recommended Setting |
-| :--- | :--- | :--- |
-| `NODE_ENV` | Enforces production security guards | `production` |
-| `PORT` | Set automatically by Render runtime | `10000` (Render default) |
-| `MONGODB_URI` | Production MongoDB Atlas connection string | `mongodb+srv://<user>:<password>@cluster.mongodb.net/feedbackhub?retryWrites=true&w=majority` |
-| `JWT_SECRET` | Cryptographically random secret ($\ge 32$ chars) | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `PUBLIC_APP_URL` | Deployed HTTPS URL of your application | `https://feedbackhub.onrender.com` |
-| `ALLOWED_ORIGINS` | Permitted CORS origins (matches public URL) | `https://feedbackhub.onrender.com` |
-| `ENABLE_DEMO_MODE` | Strictly disables 1-click demo role switcher | `false` |
+| Variable | Required | Description | Example / Recommended Setting |
+| :--- | :---: | :--- | :--- |
+| `NODE_ENV` | **Yes** | Enforces production security guards | `production` |
+| `NODE_VERSION` | **Yes** | Specifies Node.js runtime version | `22` |
+| `PORT` | **Yes** | Assigned automatically by Render | `10000` (Render default) |
+| `MONGODB_URI` | **Yes** | Production MongoDB Atlas connection URI | `mongodb+srv://<user>:<password>@cluster.mongodb.net/feedbackhub?retryWrites=true&w=majority` |
+| `JWT_SECRET` | **Yes** | Cryptographically random secret ($\ge 32$ chars) | Render generates automatically, or use: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `PUBLIC_APP_URL` | **Yes** | Deployed canonical HTTPS origin | `https://feedbackhub.onrender.com` |
+| `ALLOWED_ORIGINS` | Optional | Permitted CORS origins (matches public URL) | `https://feedbackhub.onrender.com` |
+| `ENABLE_DEMO_MODE` | **Yes** | Strictly disables 1-click demo role switcher | `false` |
 
 > [!WARNING]
 > * Never run `npm run seed` in production. Seeding is strictly blocked when `NODE_ENV=production`.
@@ -285,7 +319,16 @@ Configure the following environment variables in your Render service settings:
 >   ```bash
 >   npm run bootstrap:superadmin -- admin@yourdomain.com StrongAdminPass@2026 "Site Admin"
 >   ```
-> * The server automatically binds to `0.0.0.0` on Render's assigned `PORT` and verifies port availability before attempting database connections to eliminate `EADDRINUSE` collision masking.
+> * The server binds to `0.0.0.0` on Render's assigned `PORT` and verifies port availability before attempting database connections to eliminate `EADDRINUSE` collision masking.
+> * Public QR codes dynamically resolve using `PUBLIC_APP_URL`, preventing accidental localhost links in production.
+
+---
+
+## 📌 Known Limitations & Troubleshooting
+
+1. **DNS SRV Resolution on Local Windows Networks**: Some Windows residential ISP routers block DNS SRV lookups for `mongodb+srv://` (emitting `querySrv ECONNREFUSED`). The application automatically applies Google/Cloudflare public fallback DNS (`8.8.8.8`, `1.1.1.1`), which resolves cleanly. On Render Linux containers, standard DNS is used natively.
+2. **Disposable Test Database Requirement**: Live MongoDB Atlas tests (`npm run test:integration`, `npm run test:smoke`) require a disposable database configured via `TEST_MONGODB_URI` to prevent accidental data modification on production clusters.
+3. **Super-Admin CLI Provisioning**: In production, super-admin accounts cannot be seeded via `npm run seed`. Administrators must run `npm run bootstrap:superadmin`.
 
 ---
 

@@ -52,7 +52,9 @@ async function main() {
     { name: 'Phase 4 Data Safety & DB Protection [Safety Unit Tests]', file: 'phase4-data-safety-tests.js' },
     { name: 'Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]', file: 'phase5-rbac-lifecycle-tests.js' },
     { name: 'Phase 7 Signup & Routing Resilience [App & DB Check]', file: 'phase7-signup-routing-tests.js' },
-    { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' }
+    { name: 'Phase 8 Production Safety & E2E Verification [Express App & Safety Check]', file: 'phase8-production-safety-tests.js' },
+    { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' },
+    { name: 'Final 13-Step Release Smoke Verification [Live Database]', file: 'smoke-test-final.js' }
   ];
 
   const results = [];
@@ -62,23 +64,34 @@ async function main() {
     results.push({ name: suite.name, ...outcome });
   }
 
-  console.log('\n======================================================');
-  console.log('              AUTOMATED VERIFICATION SUMMARY          ');
-  console.log('======================================================');
+  console.log('\n=============================================================================');
+  console.log('              FEEDBACKHUB AUTOMATED VERIFICATION SUMMARY                     ');
+  console.log('=============================================================================');
 
   let allPassed = true;
+  let passedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
   results.forEach((r, idx) => {
     let statusText = 'PASS ✓';
     if (!r.success) {
       statusText = `FAIL ✗ (exit code ${r.exitCode})`;
       allPassed = false;
+      failedCount++;
     } else if (r.skipped) {
-      statusText = 'SKIPPED (no TEST_MONGODB_URI configured)';
+      statusText = 'SKIPPED (requires TEST_MONGODB_URI configured)';
+      skippedCount++;
+    } else {
+      passedCount++;
     }
-    console.log(`${idx + 1}. ${r.name.padEnd(42)}: ${statusText}`);
+    const num = (idx + 1).toString().padStart(2, ' ');
+    console.log(`${num}. ${r.name.padEnd(72)}: ${statusText}`);
   });
 
-  console.log('======================================================');
+  console.log('=============================================================================');
+  console.log(`Verification Tally: ${passedCount} Passed | ${skippedCount} Skipped (Live DB optional) | ${failedCount} Failed`);
+  console.log('=============================================================================');
 
   if (!allPassed) {
     console.error('\nOne or more test suites failed.\n');

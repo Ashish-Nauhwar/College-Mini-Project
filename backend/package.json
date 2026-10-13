@@ -9,14 +9,23 @@
     "server": "node server.js",
     "server.js": "node server.js",
     "test": "node tests/run-all-tests.js",
+    "test:security": "node tests/security-tests.js",
+    "test:nps": "node tests/nps-rating-tests.js",
+    "test:injection": "node tests/injection-validation-tests.js",
+    "test:college": "node tests/college-e2e-test.js",
+    "test:unit": "node tests/phase4-unit-tests.js",
+    "test:safety": "node tests/phase4-data-safety-tests.js",
     "test:phase5": "node tests/phase5-rbac-lifecycle-tests.js",
     "test:phase7": "node tests/phase7-signup-routing-tests.js",
-    "test:security": "node tests/security-tests.js",
+    "test:phase8": "node tests/phase8-production-safety-tests.js",
+    "test:integration": "node tests/real-mongo-integration-test.js",
+    "test:smoke": "node tests/smoke-test-final.js",
     "test:responsive": "node tests/cdp-responsive-test.js",
     "diagnose": "node scripts/diagnose.js",
     "seed": "node scripts/seed.js",
-    "bootstrap:admin": "node scripts/bootstrap-superadmin.js",
-    "migrate:mongo": "node scripts/migrate-json-to-mongo.js"
+    "migrate:mongo": "node scripts/migrate-json-to-mongo.js",
+    "bootstrap:superadmin": "node scripts/bootstrap-superadmin.js",
+    "bootstrap:admin": "node scripts/bootstrap-superadmin.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -25,5 +34,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.6.3"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }
