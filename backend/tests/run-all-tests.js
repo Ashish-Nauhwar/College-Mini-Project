@@ -32,8 +32,8 @@ async function runScript(scriptPath, name) {
     });
 
     proc.on('close', (code) => {
-      const isSkipped = output.includes('[STATUS: SKIPPED]');
-      resolve({ success: code === 0, skipped: isSkipped });
+      const isSkipped = (code === 0) && output.includes('[STATUS: SKIPPED]');
+      resolve({ success: code === 0, skipped: isSkipped, exitCode: code });
     });
   });
 }
@@ -68,11 +68,11 @@ async function main() {
   let allPassed = true;
   results.forEach((r, idx) => {
     let statusText = 'PASS ✓';
-    if (r.skipped) {
-      statusText = 'SKIPPED (no TEST_MONGODB_URI configured)';
-    } else if (!r.success) {
-      statusText = 'FAIL ✗';
+    if (!r.success) {
+      statusText = `FAIL ✗ (exit code ${r.exitCode})`;
       allPassed = false;
+    } else if (r.skipped) {
+      statusText = 'SKIPPED (no TEST_MONGODB_URI configured)';
     }
     console.log(`${idx + 1}. ${r.name.padEnd(42)}: ${statusText}`);
   });

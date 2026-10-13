@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { calculateAverageRating } = require('../utils/analyticsHelper');
 
 // GET /api/forms/templates (Starter Form Templates)
 router.get('/templates', requireAuth, (req, res) => {
@@ -343,9 +344,7 @@ router.get('/', requireAuth, async (req, res) => {
       forms.map(async f => {
         const loc = f.locationId ? await db.getLocationById(f.locationId) : null;
         const feedbacks = await db.getFeedbacks({ formId: f._id });
-        const avgRating = feedbacks.length > 0
-          ? (feedbacks.reduce((sum, item) => sum + (item.rating || 0), 0) / feedbacks.length).toFixed(1)
-          : null;
+        const avgRating = calculateAverageRating(feedbacks);
 
         return {
           id: f._id ? f._id.toString() : f.id,

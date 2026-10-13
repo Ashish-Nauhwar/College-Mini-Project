@@ -487,7 +487,7 @@ async function handleSubmit(req, res) {
 
     return res.status(201).json({
       success: true,
-      message: overallRating >= 4
+      message: (overallRating !== null && overallRating >= 4)
         ? 'Thank you for your fantastic feedback! We are thrilled to hear about your experience.'
         : 'Thank you for your feedback. We take all feedback seriously, and our team will review your comments promptly.',
       feedbackId: newFeedback._id ? newFeedback._id.toString() : newFeedback.id,

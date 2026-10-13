@@ -13,6 +13,7 @@
     "test:college": "node backend/tests/college-e2e-test.js",
     "test:unit": "node backend/tests/phase4-unit-tests.js",
     "test:safety": "node backend/tests/phase4-data-safety-tests.js",
+    "test:phase5": "node backend/tests/phase5-rbac-lifecycle-tests.js",
     "test:integration": "node backend/tests/real-mongo-integration-test.js",
     "test:responsive": "node backend/tests/cdp-responsive-test.js",
     "seed": "node backend/scripts/seed.js",

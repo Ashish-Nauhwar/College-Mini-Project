@@ -81,12 +81,15 @@ npm run bootstrap:superadmin -- admin@yourdomain.com StrongPassword@2026 "Site A
 ```
 
 ### 4. Seed Starter Data (Safe & Non-Destructive by Default)
-Populate starter demo accounts and template forms:
+Populate starter demo accounts and template forms in development:
 ```bash
 npm run seed
 ```
+* **Production Refusal Guard**: Refuses execution before connecting whenever `NODE_ENV=production` or `NODE_ENV` is unspecified. Demo accounts are never seeded in production.
+* **Zero Demo Super-Admin Accounts**: The seed script strictly creates demo owner, college admin, manager, and staff accounts only; it never creates super-admin accounts. Production administrative accounts must be created using the secure bootstrap CLI (`npm run bootstrap:superadmin`).
 * **Non-Destructive by Default**: Uses deterministic upserts. Existing businesses, users, user passwords, custom forms, and feedback are strictly preserved.
 * **Destructive Reset Guard**: Destructive seeding requires `ALLOW_DESTRUCTIVE_SEED=true` **AND** a database name verified to contain development/test keywords (`test`, `dev`, `local`). Destructive operations against unrecognized or production databases are refused.
+* **Explicit Precedence**: Uses `MONGODB_URI` from the environment or an explicitly passed URI; it never silently falls back to `TEST_MONGODB_URI`.
 
 ### 5. Start the Application
 ```bash

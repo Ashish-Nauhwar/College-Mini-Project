@@ -65,30 +65,49 @@ function calculateAverageRating(feedbacks) {
  * 9-10: Promoters
  * NPS = ((Promoters - Detractors) / Total Valid NPS Responses) * 100
  * 
+ * Supports either the designated primary NPS metric (default) or a specific questionId.
+ * Never silently mixes multiple distinct NPS questions into a single score.
+ * 
  * @param {Array<Object>} feedbacks - List of feedback items
+ * @param {string|null} [questionId=null] - Optional specific question ID for targeted NPS metric
  * @returns {Object} { npsScore: number | 'N/A', promoters: number, passives: number, detractors: number, total: number }
  */
-function calculateNps(feedbacks) {
+function calculateNps(feedbacks, questionId = null) {
   if (!Array.isArray(feedbacks) || feedbacks.length === 0) {
     return { npsScore: 'N/A', promoters: 0, passives: 0, detractors: 0, total: 0 };
   }
 
-  const npsList = feedbacks.filter(f =>
-    f &&
-    typeof f.nps === 'number' &&
-    Number.isFinite(f.nps) &&
-    f.nps >= 0 &&
-    f.nps <= 10
-  );
+  const scores = [];
+  for (const f of feedbacks) {
+    if (!f || typeof f !== 'object') continue;
+    let val;
+    if (questionId) {
+      if (f.npsAnswers && typeof f.npsAnswers.get === 'function') {
+        val = f.npsAnswers.get(questionId);
+      } else if (f.npsAnswers && f.npsAnswers[questionId] !== undefined) {
+        val = f.npsAnswers[questionId];
+      } else if (f.answers && typeof f.answers.get === 'function') {
+        val = f.answers.get(questionId);
+      } else if (f.answers && f.answers[questionId] !== undefined) {
+        val = f.answers[questionId];
+      }
+    } else {
+      val = f.nps;
+    }
 
-  if (npsList.length === 0) {
+    if (typeof val === 'number' && Number.isFinite(val) && val >= 0 && val <= 10) {
+      scores.push(val);
+    }
+  }
+
+  if (scores.length === 0) {
     return { npsScore: 'N/A', promoters: 0, passives: 0, detractors: 0, total: 0 };
   }
 
-  const promoters = npsList.filter(f => f.nps >= 9).length;
-  const passives = npsList.filter(f => f.nps >= 7 && f.nps <= 8).length;
-  const detractors = npsList.filter(f => f.nps <= 6).length;
-  const total = npsList.length;
+  const promoters = scores.filter(s => s >= 9).length;
+  const passives = scores.filter(s => s >= 7 && s <= 8).length;
+  const detractors = scores.filter(s => s <= 6).length;
+  const total = scores.length;
 
   const score = Math.round(((promoters - detractors) / total) * 100);
 

@@ -14,12 +14,34 @@
 const path = require('path');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
+const dns = require('dns');
+
+// DNS server fallback for Windows environments with SRV lookup issues
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch (e) {
+  // Ignore in restricted environments
+}
 
 // Load environment configuration
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('../src/models');
 const { hashPassword } = require('../src/utils/crypto');
+
+/**
+ * Returns the list of standard demo accounts for development and testing.
+ * Strictly NEVER includes any super-admin accounts.
+ */
+function getDemoUsers() {
+  return [
+    { email: 'sarah@apexinstitute.edu.in', name: 'Dr. Sarah Jenkins', role: 'owner', avatar: '👩‍🏫', businessType: 'college' },
+    { email: 'dean@apexinstitute.edu.in', name: 'Prof. Anil Gupta', role: 'college_admin', avatar: '👨‍🏫', businessType: 'college' },
+    { email: 'staff@apexinstitute.edu.in', name: 'Rita Roy', role: 'staff', avatar: '👩‍💼', businessType: 'college' },
+    { email: 'sarah@apexcafe.com', name: 'Sarah Jenkins', role: 'owner', avatar: '👩‍💼', businessType: 'restaurant' },
+    { email: 'marcus@apexcafe.com', name: 'Marcus Vance', role: 'manager', avatar: '👨‍💼', businessType: 'restaurant' }
+  ];
+}
 
 /**
  * Validates that a database name is explicitly and unmistakably disposable.
@@ -53,16 +75,47 @@ function extractDbNameFromUri(uri) {
 }
 
 async function seed(options = {}) {
-  // PRIORITY 1: Strictly refuse to execute demo seeding in production
-  if (process.env.NODE_ENV === 'production') {
+  // PRIORITY 1: Strictly refuse to execute demo seeding in production or unspecified environments
+  const currentEnv = process.env.NODE_ENV;
+  if (currentEnv === 'production') {
     const err = '[SAFETY REFUSAL] Demo seed script is strictly forbidden in production mode (NODE_ENV=production). Use the secure bootstrap-superadmin CLI tool to provision initial administrative accounts.';
     console.error(err);
     if (require.main === module) process.exit(1);
     throw new Error(err);
   }
 
-  // Precedence: explicit options.uri -> SEED_MONGODB_URI -> MONGODB_URI (never let TEST_MONGODB_URI override during standard seeding)
-  const uri = options.uri || process.env.SEED_MONGODB_URI || process.env.MONGODB_URI;
+  if (!['development', 'test'].includes(currentEnv)) {
+    const err = `[SAFETY REFUSAL] Demo seed script requires an explicitly configured development or test environment (NODE_ENV='development' or 'test'). Detected NODE_ENV='${currentEnv || 'unspecified'}'. Refusing to seed default demo accounts in unspecified environments.`;
+    console.error(err);
+    if (require.main === module) process.exit(1);
+    throw new Error(err);
+  }
+
+  // Support isolated in-memory mock seeding for behavioral unit tests without hitting network/Atlas
+  if (options.useMockDb || options.skipConnect) {
+    const db = require('../src/db');
+    const demoUsers = getDemoUsers();
+    const defaultBizId = options.mockBusinessId || new mongoose.Types.ObjectId().toString();
+    for (const u of demoUsers) {
+      await db.createUser({
+        name: u.name,
+        email: u.email.toLowerCase(),
+        password: 'Hash@Password123',
+        role: u.role,
+        businessId: defaultBizId,
+        avatar: u.avatar
+      });
+    }
+    return {
+      success: true,
+      dbName: 'mock_memory_db',
+      operation: 'MOCK_SEEDED',
+      usersCount: demoUsers.length
+    };
+  }
+
+  // Precedence: explicit options.uri -> MONGODB_URI (never silently choose TEST_MONGODB_URI for ordinary seeding)
+  const uri = options.uri || process.env.MONGODB_URI;
   const allowDestructive = options.allowDestructive !== undefined
     ? Boolean(options.allowDestructive)
     : process.env.ALLOW_DESTRUCTIVE_SEED === 'true';
@@ -522,5 +575,6 @@ if (require.main === module) {
 
 module.exports = {
   seed,
-  isDisposableDatabase
+  isDisposableDatabase,
+  getDemoUsers
 };

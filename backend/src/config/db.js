@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const dns = require('dns');
 
 let isConnected = false;
 
@@ -13,6 +14,15 @@ async function connectDB() {
     console.error('===============================================================\n');
     isConnected = false;
     return false;
+  }
+
+  // Windows SRV resolution fix: Windows local router DNS often fails SRV lookups (querySrv ECONNREFUSED)
+  if (uri.startsWith('mongodb+srv://')) {
+    try {
+      dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+    } catch (dnsErr) {
+      // Non-fatal fallback
+    }
   }
 
   try {
