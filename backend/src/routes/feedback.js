@@ -3,9 +3,44 @@ const router = express.Router();
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
+// Helper to strictly validate calendar dates (rejects Feb 31, Apr 31, invalid leaps, etc.)
+function isValidCalendarDate(str) {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  if (year < 1900 || year > 2100) return false;
+  if (month < 1 || month > 12) return false;
+
+  const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+  if (month === 2 && isLeap) {
+    daysInMonth[2] = 29;
+  }
+
+  if (day < 1 || day > daysInMonth[month]) return false;
+
+  const d = new Date(year, month - 1, day);
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+}
+
 // Helper to evaluate conditional visibility on the server
-function isQuestionVisible(q, answers) {
+function isQuestionVisible(q, answers, questionsMap) {
   if (!q.conditional || !q.conditional.dependsOn) return true;
+
+  // Check parent visibility if graph map provided
+  if (questionsMap && questionsMap.has(q.conditional.dependsOn)) {
+    const parentQ = questionsMap.get(q.conditional.dependsOn);
+    if (!isQuestionVisible(parentQ, answers, questionsMap)) {
+      return false;
+    }
+  }
+
   const parentValue = answers[q.conditional.dependsOn];
   const target = q.conditional.value;
   const op = q.conditional.operator || 'equals';
@@ -22,10 +57,16 @@ function isQuestionVisible(q, answers) {
         return target.some(t => String(t).trim() === String(parentValue).trim());
       }
       return false;
-    case 'greater_than':
-      return Number(parentValue) > Number(target);
-    case 'less_than':
-      return Number(parentValue) < Number(target);
+    case 'greater_than': {
+      const p = Number(parentValue);
+      const t = Number(target);
+      return Number.isFinite(p) && Number.isFinite(t) && p > t;
+    }
+    case 'less_than': {
+      const p = Number(parentValue);
+      const t = Number(target);
+      return Number.isFinite(p) && Number.isFinite(t) && p < t;
+    }
     case 'contains':
       if (Array.isArray(parentValue)) {
         return parentValue.some(item => String(item).toLowerCase().includes(String(target).toLowerCase()));
@@ -99,9 +140,9 @@ async function handleSubmit(req, res) {
             const num = Number(answerVal);
             const min = q.min !== undefined ? q.min : 1;
             const max = q.max !== undefined ? q.max : 5;
-            if (isNaN(num) || num < min || num > max) {
+            if (!Number.isFinite(num) || !Number.isInteger(num) || num < min || num > max) {
               return res.status(400).json({
-                error: `Rating for "${q.text}" must be between ${min} and ${max}`
+                error: `Rating for "${q.text}" must be an integer between ${min} and ${max}`
               });
             }
             sanitizedAnswers[q.id] = num;
@@ -109,9 +150,9 @@ async function handleSubmit(req, res) {
           }
           case 'nps': {
             const num = Number(answerVal);
-            if (isNaN(num) || num < 0 || num > 10) {
+            if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0 || num > 10) {
               return res.status(400).json({
-                error: `NPS score for "${q.text}" must be between 0 and 10`
+                error: `NPS score for "${q.text}" must be an integer between 0 and 10`
               });
             }
             sanitizedAnswers[q.id] = num;
@@ -145,8 +186,16 @@ async function handleSubmit(req, res) {
             break;
           }
           case 'yesno': {
-            const boolVal = answerVal === true || answerVal === 'yes' || answerVal === 'Yes' || answerVal === 'true';
-            sanitizedAnswers[q.id] = boolVal ? 'Yes' : 'No';
+            const raw = typeof answerVal === 'string' ? answerVal.trim().toLowerCase() : answerVal;
+            if (raw === true || raw === 'yes' || raw === 'true') {
+              sanitizedAnswers[q.id] = 'Yes';
+            } else if (raw === false || raw === 'no' || raw === 'false') {
+              sanitizedAnswers[q.id] = 'No';
+            } else {
+              return res.status(400).json({
+                error: `Field "${q.text}" must be answered with Yes or No`
+              });
+            }
             break;
           }
           case 'email': {
@@ -172,9 +221,9 @@ async function handleSubmit(req, res) {
           }
           case 'date': {
             const dateStr = String(answerVal).trim();
-            if (!dateStr || isNaN(Date.parse(dateStr))) {
+            if (!isValidCalendarDate(dateStr)) {
               return res.status(400).json({
-                error: `Field "${q.text}" must be a valid calendar date`
+                error: `Field "${q.text}" must be a valid calendar date (YYYY-MM-DD)`
               });
             }
             sanitizedAnswers[q.id] = dateStr;
@@ -182,9 +231,9 @@ async function handleSubmit(req, res) {
           }
           case 'number': {
             const num = Number(answerVal);
-            if (isNaN(num)) {
+            if (!Number.isFinite(num)) {
               return res.status(400).json({
-                error: `Field "${q.text}" must be a valid number`
+                error: `Field "${q.text}" must be a valid finite number`
               });
             }
             sanitizedAnswers[q.id] = num;
@@ -345,10 +394,11 @@ async function handleSubmit(req, res) {
     // Extract Star Rating (1 to 5 scale) - Do NOT fabricate 5 stars if not present!
     let overallRating = null;
     if (rating !== undefined && rating !== null && rating !== '') {
-      const parsedRating = parseInt(rating, 10);
-      if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
-        overallRating = parsedRating;
+      const parsedRating = Number(rating);
+      if (!Number.isFinite(parsedRating) || !Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+        return res.status(400).json({ error: 'Overall star rating must be an integer between 1 and 5' });
       }
+      overallRating = parsedRating;
     } else {
       // Find rating question if answered
       for (const [key, val] of Object.entries(sanitizedAnswers)) {
@@ -364,10 +414,11 @@ async function handleSubmit(req, res) {
     const npsAnswersMap = new Map();
     let primaryNps = null;
     if (nps !== undefined && nps !== null && nps !== '') {
-      const parsedNps = parseInt(nps, 10);
-      if (!isNaN(parsedNps) && parsedNps >= 0 && parsedNps <= 10) {
-        primaryNps = parsedNps;
+      const parsedNps = Number(nps);
+      if (!Number.isFinite(parsedNps) || !Number.isInteger(parsedNps) || parsedNps < 0 || parsedNps > 10) {
+        return res.status(400).json({ error: 'NPS score must be an integer between 0 and 10' });
       }
+      primaryNps = parsedNps;
     }
     for (const [key, val] of Object.entries(sanitizedAnswers)) {
       const matchingQ = form.questions.find(q => q.id === key);

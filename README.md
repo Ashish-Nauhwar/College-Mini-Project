@@ -1,6 +1,6 @@
 # FeedbackHub - Mobile-First Customer & Academic Feedback Platform
 
-FeedbackHub is a production-ready, mobile-first customer and institutional feedback management platform. It allows businesses, colleges, and clinics to capture instant feedback via QR codes, analyze sentiment in real time, build dynamic multi-question surveys with conditional logic, and manage complaints through dedicated workflows.
+FeedbackHub is a production-ready, mobile-first customer and institutional feedback management platform. It enables businesses, colleges, and clinics to capture instant feedback via QR codes, analyze sentiment and NPS in real time, build dynamic multi-question surveys with acyclic conditional dependency logic, and manage complaints through dedicated workflows.
 
 ---
 
@@ -18,7 +18,7 @@ FeedbackHub is a production-ready, mobile-first customer and institutional feedb
   * `User`: Multi-tenant user accounts with role-based access (`owner`, `manager`, `college_admin`, `staff`, `superadmin`). Normalized unique email index.
   * `Business`: Profile, business type (`college`, `coaching`, `restaurant`, `healthcare`, `salon`, `other`), structured physical address or online-only mode, and academic master data (`academicConfig`).
   * `Location`: Multi-store / branch locations with tenant scoping.
-  * `FeedbackForm`: Dynamic feedback forms with unique slugs, lifecycle states (`draft`, `published`, `paused`, `archived`), starter templates, college field toggles, and 12 question types with conditional rules.
+  * `FeedbackForm`: Dynamic feedback forms with unique slugs, lifecycle states (`draft`, `published`, `paused`, `archived`), starter templates, college field toggles, and 12 question types with full acyclic dependency graph validation.
   * `Feedback`: Customer submissions with sentiment classification, priority routing, academic details, internal notes, and resolution tracking.
   * `AuditLog`: System and super-admin audit trail.
 
@@ -34,22 +34,27 @@ PORT=3000
 NODE_ENV=development
 
 # Database Connection (MongoDB Atlas Connection String)
-# Replace with your cluster credentials
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.eyhonyw.mongodb.net/feedbackhub?retryWrites=true&w=majority
+# Replace with your actual cluster credentials
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/feedbackhub?retryWrites=true&w=majority
+
+# Optional: Dedicated Disposable Database for Live Integration Tests
+# TEST_MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/feedbackhub_test?retryWrites=true&w=majority
 
 # JWT Authentication Secret (Must be >= 32 characters in production)
-JWT_SECRET=super_secret_jwt_key_feedbackhub_at_least_32_characters_long_for_security_2026!
+# Generate a cryptographically secure random string with:
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET=GENERATE_SECURE_SECRET_WITH_CRYPTO_RANDOMBYTES_32
 
 # Public Domain / Base URL (Used for QR codes and CORS validation)
 PUBLIC_APP_URL=http://localhost:3000
 
 # Demo Switcher Mode (Strictly set to false in production)
-ENABLE_DEMO_MODE=true
+ENABLE_DEMO_MODE=false
 ```
 
 > [!IMPORTANT]
-> In production (`NODE_ENV=production`), the backend validates `JWT_SECRET` at startup and terminates immediately if the secret is absent, insecure, or fewer than 32 characters.
-> You can generate a cryptographically strong 64-hex-character secret using:
+> In production (`NODE_ENV=production`), the backend validates `JWT_SECRET` at startup and terminates immediately if the secret is absent, matches known example strings/placeholders, or is fewer than 32 characters.
+> Generate a cryptographically strong 64-hex-character secret using:
 > ```bash
 > node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 > ```
@@ -66,23 +71,22 @@ npm install
 ### 2. Configure MongoDB Atlas
 Update `backend/.env` with your active MongoDB Atlas connection URI:
 ```env
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.eyhonyw.mongodb.net/feedbackhub?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/feedbackhub?retryWrites=true&w=majority
 ```
 
-### 3. Run Data Migration (Non-Destructive)
-If upgrading from a previous local JSON database (`data/database.json`), run the automated migration script:
+### 3. Bootstrap Production Super-Admin (Secure CLI)
+To provision an initial super-administrator in production without using hardcoded demo passwords:
 ```bash
-npm run migrate:mongo
+npm run bootstrap:superadmin -- admin@yourdomain.com StrongPassword@2026 "Site Admin"
 ```
-* Safely backs up `data/database.json` to `data/database.backup.<timestamp>.json`.
-* Imports existing businesses, users, locations, forms, and feedbacks into MongoDB Atlas without deleting the source file.
 
-### 4. Seed Development Accounts (Dev Mode Only)
-To populate starter demo accounts and template forms:
+### 4. Seed Starter Data (Safe & Non-Destructive by Default)
+Populate starter demo accounts and template forms:
 ```bash
 npm run seed
 ```
-*(Blocked from executing in production environments for security.)*
+* **Non-Destructive by Default**: Uses deterministic upserts. Existing businesses, users, user passwords, custom forms, and feedback are strictly preserved.
+* **Destructive Reset Guard**: Destructive seeding requires `ALLOW_DESTRUCTIVE_SEED=true` **AND** a database name verified to contain development/test keywords (`test`, `dev`, `local`). Destructive operations against unrecognized or production databases are refused.
 
 ### 5. Start the Application
 ```bash
@@ -92,25 +96,21 @@ npm start
 
 ---
 
-## 🔒 Security & Authorization Highlights
+## 🔒 Security & Data Safety Architecture
 
-1. **Demo Role Escalation Lock**:
-   * The `/api/auth/switch-demo` endpoint is active **only** when `ENABLE_DEMO_MODE=true` and `NODE_ENV !== 'production'`.
-   * Public requests cannot obtain a `superadmin` token via demo switching; requests requesting super-admin elevation are rejected with `403 Forbidden`.
-   * Super-admin access requires explicit login via credentials (`admin@feedbackhub.com` / `Admin@123`).
-2. **Multi-Tenant Data Isolation**:
+1. **Deterministic Non-Destructive Seeding**:
+   * Seeding does not execute blind `deleteMany({})`. It verifies whether records already exist and updates metadata without overwriting passwords or unrelated tenant data.
+   * Target database name and operation mode are printed to the console before any database modification.
+2. **JWT Secret Validator & Blacklist**:
+   * Startup rejects short keys (< 32 chars in production) and blacklisted default strings (`feedbackhub-super-secret-key-2026`, `replace-with-a-very-secure-random...`, etc.).
+3. **Multi-Tenant Data Isolation**:
    * All database queries for forms, feedback, internal notes, locations, analytics, settings, and CSV exports are explicitly scoped to `req.user.businessId`.
-   * Cross-tenant query tampering is blocked on the server.
-3. **Sliding-Window Rate Limiting**:
-   * Production zero-dependency rate limiter with sliding window IP tracking.
-   * Emits standard RFC `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, and `Retry-After` (on HTTP 429).
-4. **Health & Readiness Check**:
-   * `GET /api/health` distinguishes between running process liveness (`status: healthy`) and database readiness (`ready: true/false`).
+   * Cross-tenant viewing or tampering attempts return `403 Forbidden`.
+4. **Rate Limiting & Security Headers**:
+   * Zero-dependency sliding window rate limiter protects auth and feedback submission endpoints, returning RFC standard `RateLimit-*` and `Retry-After` headers.
+   * Emits `nosniff`, `SAMEORIGIN`, `X-XSS-Protection`, and `Strict-Transport-Security`.
 5. **No Review Gating**:
-   * In compliance with consumer review guidelines, the optional Google Review prompt is displayed to all respondents if a Google Business URL is configured, regardless of star rating.
-   * Low-star ratings (1-3 stars) simultaneously present reassurance of direct internal managerial follow-up without hiding public review options.
-6. **Token Hygiene**:
-   * JWT payloads contain only non-sensitive identifiers (`id`, `role`, `businessId`). Passwords, hashes, and PII are never encoded into tokens.
+   * Google Review prompts are presented unconditionally across all rating scores (1★ to 5★) in compliance with consumer review transparency guidelines.
 
 ---
 
@@ -118,36 +118,48 @@ npm start
 
 ### 12 Supported Question Types
 1. **Rating Control** (`rating`): Large, accessible 5-star touch controls (1–5 scale).
-2. **Net Promoter Score** (`nps`): Touch-friendly 0–10 advocacy scale.
-3. **Multiple Choice** (`choice`): Single-select radio chips.
+2. **Net Promoter Score** (`nps`): Standard 0–10 advocacy scale.
+3. **Multiple Choice** (`choice`): Single-select choices with required options.
 4. **Dropdown Select** (`select`): Accessible dropdown selector.
 5. **Checkboxes** (`checkbox`): Multi-select options.
-6. **Yes / No Toggle** (`yesno`): Dual-button toggle.
-7. **Short Text** (`text`): Single-line text input with character limits.
-8. **Multiline Comment** (`multiline`): Responsive auto-resizing comment box.
-9. **Email Address** (`email`): Validated email input.
+6. **Yes / No Toggle** (`yesno`): Strict boolean toggle with verified Yes/No persistence.
+7. **Short Text** (`text`): Single-line text input (up to 500 characters).
+8. **Multiline Comment** (`multiline`): Responsive auto-resizing comment box (up to 3000 characters).
+9. **Email Address** (`email`): Validated RFC email format.
 10. **Phone Number** (`phone`): Validated telephone input.
-11. **Numeric Value** (`number`): Quantitative score or metric input.
-12. **Date Picker** (`date`): Standardized calendar picker with strict server-side validation.
+11. **Numeric Value** (`number`): Strict `Number.isFinite` validation.
+12. **Date Picker** (`date`): Strict calendar date validation (rejecting non-calendar dates such as February 31).
 
-### Real-Time Conditional Logic
-Questions support dynamic visibility rules configured directly in the Form Builder:
-* **Operators**: `equals`, `not_equals`, `greater_than`, `less_than`, `contains`.
-* **Client & Server Evaluation**: Rules are evaluated live in the browser as the respondent fills out the form and verified on the server before database persistence.
+### Dependency Graph Cycle Detection
+* **Acyclic Validation**: Form creation and updates validate the question dependency graph using Depth-First Search (DFS) with 3-color cycle detection.
+* Detects self-references ($A \to A$), 2-node cycles ($A \to B \to A$), and transitive loops ($A \to B \to C \to A$) before saving.
+* **Strict Operators**: Rejects invalid operators without silent fallbacks (`equals`, `not_equals`, `in`, `greater_than`, `less_than`, `contains`).
+* Requires valid finite numbers for `greater_than` and `less_than` comparisons.
 
-### College & Institutional Academic Master Data
-* **Academic Form Toggles**: Configure department, course/degree, academic year, semester, section/batch, faculty member, subject, and category.
-* **Server-Side Validation**: Server validates that submitted faculty members and subjects strictly belong to the selected department according to `business.academicConfig`.
-* **Anonymous Submissions**: Toggling "Allow Anonymous Submissions" hides mandatory student name and contact requirements.
-* **Academic Master Data Management**: Manage campus directories (departments, courses, faculty directory, and course mappings) in Business Settings.
+### Form Lifecycle & State Transitions
+* Forms default to `draft` upon creation.
+* Public feedback submissions are blocked on non-published forms (`403 Forbidden`).
+* Dedicated lifecycle transition endpoints:
+  * `PUT /api/forms/:id/publish`
+  * `PUT /api/forms/:id/pause`
+  * `PUT /api/forms/:id/resume`
+  * `PUT /api/forms/:id/archive`
 
-### Form Starter Templates
-* 🎓 College Academic & Course Evaluation
-* 👨‍🏫 Faculty & Teaching Evaluation
-* 🏛️ Campus & Facilities Feedback
-* 🍽️ Restaurant & Dining Experience
-* 📚 Coaching & Test Prep Evaluation
-* 💼 General Customer Experience
+### Institutional Academic Master Data
+* **No Hardcoded Fallbacks**: Dropdown choices for academic years, semesters, sections, faculty, and subjects are dynamically derived from the institution's `academicConfig`.
+* **Clean Values & Dropdown Resetting**: Dropdowns store clean subject identifiers as option values while displaying `Subject Name (Code)`. Changing department resets any invalid or stale selections.
+* **Cross-Department Protection**: Server rejects forged subjects or faculty members that do not match the chosen department.
+
+---
+
+## 📊 Analytics & Complaints Correctness
+
+* **Complaints Helper (`isComplaint`)**:
+  * A submission is identified as a complaint if star rating $\le 2$, OR NPS $\le 6$ (detractor), OR sentiment is negative.
+  * A high star rating (e.g. 4 or 5 stars) **never overrides** a low NPS detractor score or negative sentiment.
+* **Segregated Star Rating & NPS Metrics**:
+  * Star rating is averaged strictly from submissions containing a 1–5 star rating question. Submissions without rating questions are excluded and return `'N/A'`.
+  * NPS is computed using standard advocacy rules: $\text{NPS} = \% \text{Promoters (9-10)} - \% \text{Detractors (0-6)}$. Submissions without an NPS answer are excluded from the denominator.
 
 ---
 
@@ -157,33 +169,47 @@ Questions support dynamic visibility rules configured directly in the Form Build
 ```bash
 npm test
 ```
-Executes all four primary automated test suites with clear PASS / FAIL summary reporting.
+Executes all automated suites with full summary reporting:
+```
+======================================================
+              AUTOMATED VERIFICATION SUMMARY          
+======================================================
+1. Security, RBAC & Isolation                : PASS ✓
+2. NPS & Rating Formula Correctness          : PASS ✓
+3. Injection Hardening & Validation          : PASS ✓
+4. College Academic 12-Step E2E Flow         : PASS ✓
+5. Phase 4 Unit Tests (Graph/Analytics/JWT)  : PASS ✓
+6. Phase 4 Data Safety & DB Protection       : PASS ✓
+7. Real MongoDB Atlas Integration            : SKIPPED (no TEST_MONGODB_URI configured)
+======================================================
+```
 
 ### Individual Test Suites
 ```bash
-# 1. Security, RBAC & Isolation Suite (16 Tests)
+# 1. Security, RBAC & Multi-Tenant Isolation (Ephemeral Server port 0)
 npm run test:security
 
-# 2. NPS & Rating Formula Correctness Suite (11 Tests)
+# 2. NPS & Star Rating Formula Correctness (Imports real production helpers)
 npm run test:nps
 
-# 3. Injection Hardening & Form Builder Validation Suite (7 Tests)
+# 3. Injection Hardening & Input Sanitization
 npm run test:injection
 
-# 4. College Academic 12-Step End-to-End Scenario Suite (17 Tests)
+# 4. College Academic 12-Step Scenario Flow
 npm run test:college
 
-# 5. Native Edge CDP Responsive Multi-Device Verification (320px - 1440px)
+# 5. Phase 4 Unit Tests (Graph Cycle Detection, Complaints Helper, JWT Validator)
+npm run test:unit
+
+# 6. Phase 4 Data Safety & Database Protection (Non-destructive seeding enforcement)
+npm run test:safety
+
+# 7. Real MongoDB Atlas Integration (Runs when TEST_MONGODB_URI is provided)
+npm run test:integration
+
+# 8. Multi-Device Responsive UI Verification (320px - 1440px)
 npm run test:responsive
 ```
-
-### Verified Acceptance Criteria:
-* **NPS Accuracy**: NPS formula strictly computed from 0–10 NPS answers (`Promoters (9-10) - Detractors (0-6)`). Star ratings (1-5) and NPS are completely segregated. Forms without rating or NPS return explicit `N/A` without fabricated 5 stars or NaN crashes.
-* **Injection Hardening**: Question IDs with XSS or directory traversal are sanitized. Blank question labels and option-less choices are rejected with HTTP 400. Self-referential conditional loops and dependencies on non-existent questions are blocked.
-* **College Field Validation**: Department, faculty, subject, and academic years are strictly validated against institutional master data. Cross-departmental faculty mismatches are rejected with HTTP 400.
-* **Form Lifecycle**: New forms default to `draft`. Draft and paused forms strictly reject public submissions with HTTP 403. Form QR pages indicate draft/paused status.
-* **Tenant Isolation**: Forms, locations, feedback, and analytics are isolated per tenant. Cross-business view or modification attempts are blocked with HTTP 403.
-* **Test Isolation**: Automated test suites run in isolated test database mode so offline environments or disconnected Atlas clusters do not yield false 503s. Negative tests prove genuine HTTP 400 and 403 status codes.
 
 ---
 

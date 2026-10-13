@@ -38,27 +38,20 @@ function it(description, fn) {
   }
 }
 
-// Pure formula helper matching analytics implementation
+const { calculateAverageRating, calculateNps } = require('../src/utils/analyticsHelper');
+
+// Pure formula helper delegating directly to real production implementation
 function calculateMetrics(feedbacks) {
-  const rated = feedbacks.filter(f => typeof f.rating === 'number' && !isNaN(f.rating));
-  const avgRating = rated.length > 0
-    ? (rated.reduce((sum, f) => sum + f.rating, 0) / rated.length).toFixed(1)
-    : 'N/A';
-
-  const npsResponses = feedbacks.filter(f => typeof f.nps === 'number' && !isNaN(f.nps) && f.nps >= 0 && f.nps <= 10);
-  let npsScore = 'N/A';
-  let promoters = 0;
-  let passives = 0;
-  let detractors = 0;
-
-  if (npsResponses.length > 0) {
-    promoters = npsResponses.filter(f => f.nps >= 9).length;
-    passives = npsResponses.filter(f => f.nps >= 7 && f.nps <= 8).length;
-    detractors = npsResponses.filter(f => f.nps <= 6).length;
-    npsScore = Math.round(((promoters - detractors) / npsResponses.length) * 100);
-  }
-
-  return { avgRating, npsScore, promoters, passives, detractors, totalNps: npsResponses.length };
+  const avgRating = calculateAverageRating(feedbacks);
+  const npsData = calculateNps(feedbacks);
+  return {
+    avgRating,
+    npsScore: npsData.npsScore,
+    promoters: npsData.promoters,
+    passives: npsData.passives,
+    detractors: npsData.detractors,
+    totalNps: npsData.total
+  };
 }
 
 async function runNpsRatingTests() {

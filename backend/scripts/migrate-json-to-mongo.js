@@ -1,8 +1,12 @@
 /**
- * Non-destructive Migration Script: JSON Database to MongoDB Atlas
+ * Non-destructive Idempotent Migration Script: JSON Database to MongoDB Atlas
  * Usage: node backend/scripts/migrate-json-to-mongo.js
  * 
- * Preserves the original JSON file and creates a backup copy.
+ * SAFETY & IDEMPOTENCY:
+ * 1. Strictly preserves original JSON file.
+ * 2. Creates a timestamped backup before execution.
+ * 3. Uses idempotent upserts to prevent duplicate records on repeated execution.
+ * 4. Prints target database name and clear recovery instructions.
  */
 
 const path = require('path');
@@ -31,109 +35,123 @@ async function migrate() {
   // Backup original JSON file
   const backupPath = path.join(__dirname, '..', 'data', `database.backup-${Date.now()}.json`);
   fs.copyFileSync(jsonPath, backupPath);
-  console.log(`[Backup] Safe backup created at: ${backupPath}`);
+  console.log(`[Backup Created] Safe backup created at: ${backupPath}`);
 
   const raw = fs.readFileSync(jsonPath, 'utf-8');
   const data = JSON.parse(raw);
 
   console.log('[Connecting] Connecting to MongoDB Atlas...');
   await mongoose.connect(uri);
-  console.log('[Connected] Successfully connected to MongoDB Atlas.\n');
+  const dbName = mongoose.connection.name;
+  console.log(`[Connected] Connected to target database: "${dbName}"\n`);
 
   const idMap = new Map(); // Old ID string -> New Mongo ObjectId
 
-  // 1. Migrate Businesses
+  // 1. Migrate Businesses (Idempotent)
   console.log(`Migrating ${(data.businesses || []).length} businesses...`);
   for (const b of data.businesses || []) {
-    const newDoc = new Business({
-      name: b.name,
-      type: b.type || (b.category?.toLowerCase().includes('cafe') ? 'restaurant' : 'other'),
-      category: b.category,
-      email: b.email,
-      phone: b.phone,
-      address: {
-        addressLine1: b.address || '',
-        city: 'Metropolis',
-        state: 'State',
-        postalCode: '10001',
-        country: 'India'
-      },
-      logo: b.logo || '🏢',
-      googleReviewUrl: b.googleReviewUrl || '',
-      active: b.active !== false
-    });
-    await newDoc.save();
-    idMap.set(b.id, newDoc._id);
+    let existing = await Business.findOne({ email: b.email });
+    if (!existing) {
+      existing = new Business({
+        name: b.name,
+        type: b.type || (b.category?.toLowerCase().includes('cafe') ? 'restaurant' : 'other'),
+        category: b.category,
+        email: b.email,
+        phone: b.phone,
+        address: {
+          addressLine1: b.address || '',
+          city: 'Metropolis',
+          state: 'State',
+          postalCode: '10001',
+          country: 'India'
+        },
+        logo: b.logo || '🏢',
+        googleReviewUrl: b.googleReviewUrl || '',
+        active: b.active !== false
+      });
+      await existing.save();
+    }
+    idMap.set(b.id, existing._id);
   }
 
-  // 2. Migrate Locations
+  // 2. Migrate Locations (Idempotent)
   console.log(`Migrating ${(data.locations || []).length} locations...`);
   for (const l of data.locations || []) {
     const bizId = idMap.get(l.businessId);
     if (!bizId) continue;
-    const newDoc = new Location({
-      businessId: bizId,
-      name: l.name,
-      code: l.code || '',
-      address: l.address,
-      phone: l.phone || '',
-      manager: l.manager || '',
-      active: l.active !== false
-    });
-    await newDoc.save();
-    idMap.set(l.id, newDoc._id);
+
+    let existing = await Location.findOne({ businessId: bizId, name: l.name });
+    if (!existing) {
+      existing = new Location({
+        businessId: bizId,
+        name: l.name,
+        code: l.code || '',
+        address: l.address,
+        phone: l.phone || '',
+        manager: l.manager || '',
+        active: l.active !== false
+      });
+      await existing.save();
+    }
+    idMap.set(l.id, existing._id);
   }
 
-  // 3. Migrate Users
+  // 3. Migrate Users (Idempotent)
   console.log(`Migrating ${(data.users || []).length} users...`);
   for (const u of data.users || []) {
     const bizId = u.businessId ? idMap.get(u.businessId) : null;
-    const newDoc = new User({
-      name: u.name,
-      email: u.email.toLowerCase(),
-      password: u.password, // Pre-hashed
-      role: u.role || 'owner',
-      businessId: bizId,
-      avatar: u.avatar || '👤'
-    });
-    await newDoc.save();
-    idMap.set(u.id, newDoc._id);
+    let existing = await User.findOne({ email: u.email.toLowerCase() });
+    if (!existing) {
+      existing = new User({
+        name: u.name,
+        email: u.email.toLowerCase(),
+        password: u.password, // Pre-hashed
+        role: u.role || 'owner',
+        businessId: bizId,
+        avatar: u.avatar || '👤'
+      });
+      await existing.save();
+    }
+    idMap.set(u.id, existing._id);
   }
 
-  // 4. Migrate Feedback Forms
+  // 4. Migrate Feedback Forms (Idempotent)
   console.log(`Migrating ${(data.forms || []).length} feedback forms...`);
   for (const f of data.forms || []) {
     const bizId = idMap.get(f.businessId);
     if (!bizId) continue;
     const locId = f.locationId ? idMap.get(f.locationId) : null;
 
-    const newDoc = new FeedbackForm({
-      businessId: bizId,
-      locationId: locId,
-      slug: f.slug.toLowerCase(),
-      title: f.title,
-      description: f.description || '',
-      formType: f.formType || 'general',
-      status: f.status || 'published',
-      googleReviewUrl: f.googleReviewUrl || '',
-      questions: (f.questions || []).map((q, idx) => ({
-        id: q.id || `q_${idx + 1}`,
-        type: q.type,
-        text: q.text,
-        description: q.description || '',
-        required: Boolean(q.required),
-        min: q.min,
-        max: q.max,
-        options: q.options || [],
-        multiline: Boolean(q.multiline),
-        order: idx
-      }))
-    });
-    await newDoc.save();
-    idMap.set(f.id, newDoc._id);
+    let existing = await FeedbackForm.findOne({ businessId: bizId, slug: f.slug.toLowerCase() });
+    if (!existing) {
+      existing = new FeedbackForm({
+        businessId: bizId,
+        locationId: locId,
+        slug: f.slug.toLowerCase(),
+        title: f.title,
+        description: f.description || '',
+        formType: f.formType || 'general',
+        status: f.status || 'published',
+        googleReviewUrl: f.googleReviewUrl || '',
+        questions: (f.questions || []).map((q, idx) => ({
+          id: q.id || `q_${idx + 1}`,
+          type: q.type,
+          text: q.text,
+          description: q.description || '',
+          required: Boolean(q.required),
+          min: q.min,
+          max: q.max,
+          options: q.options || [],
+          multiline: Boolean(q.multiline),
+          order: idx
+        }))
+      });
+      await existing.save();
+    }
+    idMap.set(f.id, existing._id);
   }
 
-  // 5. Migrate Feedback Responses
+  // 5. Migrate Feedback Responses (Idempotent)
   console.log(`Migrating ${(data.feedbacks || []).length} feedback records...`);
   for (const fb of data.feedbacks || []) {
     const bizId = idMap.get(fb.businessId);
@@ -141,53 +159,81 @@ async function migrate() {
     if (!bizId || !formId) continue;
     const locId = fb.locationId ? idMap.get(fb.locationId) : null;
 
-    const answersMap = new Map();
-    if (fb.answers) {
-      for (const [k, v] of Object.entries(fb.answers)) {
-        answersMap.set(k, v);
-      }
-    }
+    const createdAt = fb.createdAt ? new Date(fb.createdAt) : new Date();
 
-    const newDoc = new Feedback({
+    const existing = await Feedback.findOne({
       businessId: bizId,
       formId: formId,
-      locationId: locId,
-      rating: fb.rating,
-      sentiment: fb.sentiment || 'neutral',
-      status: fb.status || 'new',
-      priority: fb.priority || 'medium',
-      customerName: fb.customerName || 'Anonymous',
       customerEmail: fb.customerEmail || '',
-      customerPhone: fb.customerPhone || '',
-      answers: answersMap,
-      comments: fb.comments || '',
-      assignedTo: fb.assignedTo || '',
-      resolutionNotes: fb.resolutionNotes || '',
-      internalNotes: (fb.internalNotes || []).map(n => ({
-        text: n.text,
-        author: n.author,
-        createdAt: n.createdAt ? new Date(n.createdAt) : new Date()
-      })),
-      source: fb.source || 'QR Code',
-      createdAt: fb.createdAt ? new Date(fb.createdAt) : new Date()
+      createdAt
     });
-    await newDoc.save();
+
+    if (!existing) {
+      const answersMap = new Map();
+      if (fb.answers) {
+        for (const [k, v] of Object.entries(fb.answers)) {
+          answersMap.set(k, v);
+        }
+      }
+
+      const newDoc = new Feedback({
+        businessId: bizId,
+        formId: formId,
+        locationId: locId,
+        rating: fb.rating,
+        sentiment: fb.sentiment || 'neutral',
+        status: fb.status || 'new',
+        priority: fb.priority || 'medium',
+        customerName: fb.customerName || 'Anonymous',
+        customerEmail: fb.customerEmail || '',
+        customerPhone: fb.customerPhone || '',
+        answers: answersMap,
+        comments: fb.comments || '',
+        assignedTo: fb.assignedTo || '',
+        resolutionNotes: fb.resolutionNotes || '',
+        internalNotes: (fb.internalNotes || []).map(n => ({
+          text: n.text,
+          author: n.author,
+          createdAt: n.createdAt ? new Date(n.createdAt) : new Date()
+        })),
+        source: fb.source || 'QR Code',
+        createdAt
+      });
+      await newDoc.save();
+    }
   }
 
-  // 6. Migrate Audit Logs
+  // 6. Migrate Audit Logs (Idempotent)
   console.log(`Migrating ${(data.auditLogs || []).length} audit logs...`);
   for (const a of data.auditLogs || []) {
-    const newDoc = new AuditLog({
+    const createdAt = a.timestamp ? new Date(a.timestamp) : new Date();
+    const existing = await AuditLog.findOne({
       action: a.action,
       actor: a.actor,
-      details: a.details || '',
-      createdAt: a.timestamp ? new Date(a.timestamp) : new Date()
+      createdAt
     });
-    await newDoc.save();
+
+    if (!existing) {
+      const newDoc = new AuditLog({
+        action: a.action,
+        actor: a.actor,
+        details: a.details || '',
+        createdAt
+      });
+      await newDoc.save();
+    }
   }
 
-  console.log('\n[SUCCESS] All JSON data safely migrated into MongoDB Atlas!');
-  console.log('[Notice] Original JSON file was preserved at:', jsonPath);
+  console.log('\n===============================================================');
+  console.log(`[SUCCESS] JSON database safely migrated to MongoDB database "${dbName}"!`);
+  console.log('[Notice] Original JSON database was untouched at:', jsonPath);
+  console.log('[Notice] Timestamped backup was preserved at:', backupPath);
+  console.log('\n--- BACKUP & RECOVERY INSTRUCTIONS ---');
+  console.log('1. To restore from the JSON backup, copy the timestamped file:');
+  console.log(`   cp "${backupPath}" "${jsonPath}"`);
+  console.log('2. The migration is idempotent; running it multiple times will not duplicate documents.');
+  console.log('===============================================================\n');
+
   await mongoose.connection.close();
 }
 

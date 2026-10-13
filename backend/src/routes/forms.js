@@ -411,83 +411,11 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
+const { validateQuestionGraph } = require('../utils/formGraphValidator');
+
+// Helper to sanitize questions using full graph validation
 function validateAndSanitizeQuestions(rawQuestions) {
-  if (!Array.isArray(rawQuestions)) return { error: null, questions: [] };
-
-  const idSet = new Set();
-  const sanitized = [];
-
-  for (let idx = 0; idx < rawQuestions.length; idx++) {
-    const q = rawQuestions[idx];
-    if (!q || typeof q !== 'object') {
-      return { error: `Invalid question format at position ${idx + 1}` };
-    }
-
-    const text = q.text ? String(q.text).trim() : '';
-    if (!text) {
-      return { error: `Question label cannot be empty (question #${idx + 1})` };
-    }
-
-    const allowedTypes = [
-      'rating', 'nps', 'text', 'multiline', 'choice', 'select',
-      'checkbox', 'yesno', 'email', 'phone', 'number', 'date'
-    ];
-    const type = q.type && allowedTypes.includes(q.type) ? q.type : null;
-    if (!type) {
-      return { error: `Invalid question type "${q.type}" for question #${idx + 1}` };
-    }
-
-    let qId = q.id && typeof q.id === 'string' ? q.id.trim() : '';
-    const safeIdRegex = /^[a-zA-Z0-9_-]{1,64}$/;
-    if (!qId || !safeIdRegex.test(qId) || idSet.has(qId)) {
-      qId = `q_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
-    }
-    idSet.add(qId);
-
-    let options = [];
-    if (['choice', 'select', 'checkbox'].includes(type)) {
-      options = Array.isArray(q.options)
-        ? q.options.map(opt => String(opt).trim()).filter(Boolean)
-        : [];
-      if (options.length === 0) {
-        return { error: `Question "${text}" of type "${type}" must have at least one valid option` };
-      }
-    }
-
-    sanitized.push({
-      id: qId,
-      type,
-      text,
-      description: q.description ? String(q.description).trim() : '',
-      placeholder: q.placeholder ? String(q.placeholder).trim() : '',
-      required: Boolean(q.required),
-      min: typeof q.min === 'number' ? q.min : (type === 'nps' ? 0 : 1),
-      max: typeof q.max === 'number' ? q.max : (type === 'nps' ? 10 : 5),
-      options,
-      multiline: Boolean(q.multiline),
-      order: typeof q.order === 'number' ? q.order : idx,
-      conditional: q.conditional && q.conditional.dependsOn ? {
-        dependsOn: String(q.conditional.dependsOn).trim(),
-        operator: ['equals', 'not_equals', 'in', 'greater_than', 'less_than', 'contains'].includes(q.conditional.operator)
-          ? q.conditional.operator
-          : 'equals',
-        value: q.conditional.value
-      } : null
-    });
-  }
-
-  for (const q of sanitized) {
-    if (q.conditional) {
-      if (q.conditional.dependsOn === q.id) {
-        return { error: `Question "${q.text}" cannot depend on itself` };
-      }
-      if (!idSet.has(q.conditional.dependsOn)) {
-        return { error: `Question "${q.text}" depends on non-existent question "${q.conditional.dependsOn}"` };
-      }
-    }
-  }
-
-  return { error: null, questions: sanitized };
+  return validateQuestionGraph(rawQuestions);
 }
 
 // POST /api/forms (Authenticated - Multi-Tenant Scoped)
@@ -499,7 +427,6 @@ router.post('/', requireAuth, async (req, res) => {
       locationId,
       slug,
       questions,
-      status,
       formType,
       googleReviewUrl,
       collegeFieldsConfig,
@@ -537,13 +464,14 @@ router.post('/', requireAuth, async (req, res) => {
       attempts++;
     }
 
-    // Validate and sanitize questions
-    const qValidation = validateAndSanitizeQuestions(questions);
+    // Validate and sanitize questions (with full cycle and conditional checks)
+    const qValidation = validateQuestionGraph(questions);
     if (qValidation.error) {
       return res.status(400).json({ error: qValidation.error });
     }
 
-    const initialStatus = ['draft', 'published', 'paused', 'archived'].includes(status) ? status : 'draft';
+    // PRIORITY 7: New forms are ALWAYS created in 'draft' status regardless of request body payload
+    const initialStatus = 'draft';
 
     const newForm = await db.createForm({
       businessId,
@@ -562,7 +490,7 @@ router.post('/', requireAuth, async (req, res) => {
     await db.logAudit(
       'Form Created',
       req.user.name,
-      `Created form "${newForm.title}" (${newForm.slug}) in ${newForm.status} status`,
+      `Created form "${newForm.title}" (${newForm.slug}) in draft status`,
       businessId,
       req.ip
     );
@@ -670,6 +598,67 @@ router.put('/:id', requireAuth, async (req, res) => {
     console.error('[Update Form Error]:', err);
     return res.status(500).json({ error: 'Failed to update form' });
   }
+});
+
+// State transition helper
+async function handleStateTransition(req, res, targetStatus, actionName) {
+  try {
+    const form = await db.getFormById(req.params.id);
+    if (!form) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const formBizId = form.businessId ? form.businessId.toString() : '';
+    const userBizId = req.user.businessId ? req.user.businessId.toString() : '';
+
+    if (req.user.role !== 'superadmin' && formBizId !== userBizId) {
+      return res.status(403).json({ error: 'Unauthorized to update this form. Cross-tenant access is prohibited.' });
+    }
+
+    const previousStatus = form.status;
+    const updated = await db.updateForm(req.params.id, { status: targetStatus });
+    await db.logAudit(
+      actionName,
+      req.user.name,
+      `Transitioned form "${updated.title}" (${updated.slug}) from ${previousStatus} to ${targetStatus}`,
+      form.businessId,
+      req.ip
+    );
+
+    return res.json({
+      form: {
+        ...updated.toObject ? updated.toObject() : updated,
+        id: updated._id ? updated._id.toString() : updated.id
+      }
+    });
+  } catch (err) {
+    if (err.statusCode === 503) {
+      return res.status(503).json({ error: err.message });
+    }
+    console.error(`[${actionName} Error]:`, err);
+    return res.status(500).json({ error: `Failed to transition form to ${targetStatus}` });
+  }
+}
+
+// Explicit State Transition Endpoints (Priority 7)
+// PUT /api/forms/:id/publish
+router.put('/:id/publish', requireAuth, (req, res) => {
+  return handleStateTransition(req, res, 'published', 'Form Published');
+});
+
+// PUT /api/forms/:id/pause
+router.put('/:id/pause', requireAuth, (req, res) => {
+  return handleStateTransition(req, res, 'paused', 'Form Paused');
+});
+
+// PUT /api/forms/:id/resume
+router.put('/:id/resume', requireAuth, (req, res) => {
+  return handleStateTransition(req, res, 'published', 'Form Resumed');
+});
+
+// PUT /api/forms/:id/archive
+router.put('/:id/archive', requireAuth, (req, res) => {
+  return handleStateTransition(req, res, 'archived', 'Form Archived');
 });
 
 // DELETE /api/forms/:id (Authenticated - Multi-Tenant Protected)

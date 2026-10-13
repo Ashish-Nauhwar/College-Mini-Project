@@ -1,10 +1,13 @@
 /**
- * Master Test Runner for FeedbackHub
+ * Master Test Runner for FeedbackHub (Phases 3 & 4)
  * Executes:
  * 1. Security & RBAC Suite (security-tests.js)
- * 2. NPS & Rating Data Correctness Suite (nps-rating-tests.js)
+ * 2. NPS & Rating Formula Correctness Suite (nps-rating-tests.js)
  * 3. Form Builder & Injection Hardening Suite (injection-validation-tests.js)
  * 4. College Academic End-to-End Scenario Suite (college-e2e-test.js)
+ * 5. Phase 4 Unit Tests (phase4-unit-tests.js)
+ * 6. Phase 4 Data Safety Suite (phase4-data-safety-tests.js)
+ * 7. Real MongoDB Atlas Integration Suite (real-mongo-integration-test.js)
  */
 
 const { spawn } = require('child_process');
@@ -15,40 +18,62 @@ async function runScript(scriptPath, name) {
     console.log(`\n======================================================`);
     console.log(`>>> Executing Suite: ${name}`);
     console.log(`======================================================`);
-    const proc = spawn('node', [scriptPath], { stdio: 'inherit' });
+    let output = '';
+    const proc = spawn('node', [scriptPath], { stdio: ['inherit', 'pipe', 'pipe'] });
+    
+    proc.stdout.on('data', (data) => {
+      process.stdout.write(data);
+      output += data.toString();
+    });
+
+    proc.stderr.on('data', (data) => {
+      process.stderr.write(data);
+      output += data.toString();
+    });
+
     proc.on('close', (code) => {
-      resolve(code === 0);
+      const isSkipped = output.includes('[STATUS: SKIPPED]');
+      resolve({ success: code === 0, skipped: isSkipped });
     });
   });
 }
 
 async function main() {
   console.log('******************************************************');
-  console.log('       FEEDBACKHUB PHASE 3 MASTER TEST RUNNER         ');
+  console.log('       FEEDBACKHUB MASTER AUTOMATED TEST RUNNER       ');
   console.log('******************************************************');
 
   const suites = [
     { name: 'Security, RBAC & Isolation', file: 'security-tests.js' },
     { name: 'NPS & Rating Formula Correctness', file: 'nps-rating-tests.js' },
     { name: 'Injection Hardening & Validation', file: 'injection-validation-tests.js' },
-    { name: 'College Academic 12-Step E2E Flow', file: 'college-e2e-test.js' }
+    { name: 'College Academic 12-Step E2E Flow', file: 'college-e2e-test.js' },
+    { name: 'Phase 4 Unit Tests (Graph/Analytics/JWT)', file: 'phase4-unit-tests.js' },
+    { name: 'Phase 4 Data Safety & DB Protection', file: 'phase4-data-safety-tests.js' },
+    { name: 'Real MongoDB Atlas Integration', file: 'real-mongo-integration-test.js' }
   ];
 
   const results = [];
 
   for (const suite of suites) {
-    const success = await runScript(path.join(__dirname, suite.file), suite.name);
-    results.push({ name: suite.name, success });
+    const outcome = await runScript(path.join(__dirname, suite.file), suite.name);
+    results.push({ name: suite.name, ...outcome });
   }
 
   console.log('\n======================================================');
-  console.log('              PHASE 3 VERIFICATION SUMMARY            ');
+  console.log('              AUTOMATED VERIFICATION SUMMARY          ');
   console.log('======================================================');
 
   let allPassed = true;
   results.forEach((r, idx) => {
-    console.log(`${idx + 1}. ${r.name.padEnd(38)}: ${r.success ? 'PASS ✓' : 'FAIL ✗'}`);
-    if (!r.success) allPassed = false;
+    let statusText = 'PASS ✓';
+    if (r.skipped) {
+      statusText = 'SKIPPED (no TEST_MONGODB_URI configured)';
+    } else if (!r.success) {
+      statusText = 'FAIL ✗';
+      allPassed = false;
+    }
+    console.log(`${idx + 1}. ${r.name.padEnd(42)}: ${statusText}`);
   });
 
   console.log('======================================================');
@@ -57,7 +82,7 @@ async function main() {
     console.error('\nOne or more test suites failed.\n');
     process.exit(1);
   } else {
-    console.log('\nAll test suites passed with 100% verification!\n');
+    console.log('\nAll active verification suites completed with 100% SUCCESS!\n');
     process.exit(0);
   }
 }

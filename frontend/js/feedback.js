@@ -83,16 +83,17 @@
     const grid = document.getElementById('collegeFieldsGrid');
     if (!section || !grid || !config) return;
 
+    // Academic options derived strictly from institution's academicConfig - no hardcoded fallbacks
     const fields = [
       { key: 'department', label: 'Department / Branch', enabled: config.departmentEnabled, required: config.departmentRequired, options: academicConfig?.departments || [] },
       { key: 'course', label: 'Course / Program', enabled: config.courseEnabled, required: config.courseRequired, options: academicConfig?.courses || [] },
-      { key: 'academicYear', label: 'Academic Year', enabled: config.academicYearEnabled, required: config.academicYearRequired, options: (academicConfig?.academicYears && academicConfig.academicYears.length > 0) ? academicConfig.academicYears : ['2023-2024', '2024-2025', '2025-2026', '2026-2027'] },
-      { key: 'yearOfStudy', label: 'Year of Study', enabled: config.yearOfStudyEnabled, required: config.yearOfStudyRequired, options: academicConfig?.years || ['1st Year', '2nd Year', '3rd Year', '4th Year'] },
-      { key: 'semester', label: 'Semester', enabled: config.semesterEnabled, required: config.semesterRequired, options: academicConfig?.semesters || ['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4', 'Semester 5', 'Semester 6', 'Semester 7', 'Semester 8'] },
-      { key: 'section', label: 'Class / Section', enabled: config.sectionEnabled, required: config.sectionRequired, options: academicConfig?.sections || ['Section A', 'Section B', 'Section C'] },
-      { key: 'faculty', label: 'Faculty Member', enabled: config.facultyEnabled, required: config.facultyRequired, options: (academicConfig?.faculty || []).map(f => f.name || f) },
-      { key: 'subject', label: 'Subject / Course Unit', enabled: config.subjectEnabled, required: config.subjectRequired, options: (academicConfig?.subjects || []).map(s => s.name ? `${s.name} (${s.code || ''})` : s) },
-      { key: 'category', label: 'Feedback Category', enabled: config.categoryEnabled, required: config.categoryRequired, options: (academicConfig?.feedbackCategories && academicConfig.feedbackCategories.length > 0) ? academicConfig.feedbackCategories : ['Teaching & Pedagogy', 'Laboratory / Practical', 'Library Facilities', 'Hostel Facilities', 'Canteen & Food', 'Wi-Fi & Campus Internet', 'Cleanliness & Infrastructure'] }
+      { key: 'academicYear', label: 'Academic Year', enabled: config.academicYearEnabled, required: config.academicYearRequired, options: academicConfig?.academicYears || [] },
+      { key: 'yearOfStudy', label: 'Year of Study', enabled: config.yearOfStudyEnabled, required: config.yearOfStudyRequired, options: academicConfig?.years || [] },
+      { key: 'semester', label: 'Semester', enabled: config.semesterEnabled, required: config.semesterRequired, options: academicConfig?.semesters || [] },
+      { key: 'section', label: 'Class / Section', enabled: config.sectionEnabled, required: config.sectionRequired, options: academicConfig?.sections || [] },
+      { key: 'faculty', label: 'Faculty Member', enabled: config.facultyEnabled, required: config.facultyRequired, options: (academicConfig?.faculty || []).map(f => typeof f === 'object' ? { value: f.name, label: f.name } : { value: f, label: f }) },
+      { key: 'subject', label: 'Subject / Course Unit', enabled: config.subjectEnabled, required: config.subjectRequired, options: (academicConfig?.subjects || []).map(s => typeof s === 'object' ? { value: s.name, label: `${s.name}${s.code ? ` (${s.code})` : ''}` } : { value: s, label: s }) },
+      { key: 'category', label: 'Feedback Category', enabled: config.categoryEnabled, required: config.categoryRequired, options: academicConfig?.feedbackCategories || [] }
     ];
 
     const activeFields = fields.filter(f => f.enabled);
@@ -109,7 +110,11 @@
         </label>
         <select id="acad_${f.key}" class="form-select" onchange="window.updateAcademicField('${f.key}', this.value)">
           <option value="">-- Select ${f.label} --</option>
-          ${f.options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
+          ${f.options.map(opt => {
+            const val = typeof opt === 'object' ? opt.value : opt;
+            const lbl = typeof opt === 'object' ? opt.label : opt;
+            return `<option value="${escapeHtml(val)}">${escapeHtml(lbl)}</option>`;
+          }).join('')}
         </select>
         <div id="error_acad_${f.key}" class="form-error hidden">Please select ${f.label.toLowerCase()}</div>
       </div>
@@ -130,13 +135,38 @@
       if (facultySelect && currentBusiness.academicConfig.faculty) {
         const filteredFac = currentBusiness.academicConfig.faculty.filter(f => !selectedDept || !f.department || f.department === selectedDept);
         facultySelect.innerHTML = '<option value="">-- Select Faculty Member --</option>' +
-          filteredFac.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
+          filteredFac.map(f => {
+            const facName = typeof f === 'object' ? f.name : f;
+            return `<option value="${escapeHtml(facName)}">${escapeHtml(facName)}</option>`;
+          }).join('');
+
+        // Reset stale selection if previously selected faculty is no longer in filtered list
+        const stillValidFac = filteredFac.some(f => (typeof f === 'object' ? f.name : f) === academicDetails.faculty);
+        if (!stillValidFac) {
+          academicDetails.faculty = '';
+          facultySelect.value = '';
+        } else {
+          facultySelect.value = academicDetails.faculty;
+        }
       }
 
       if (subjectSelect && currentBusiness.academicConfig.subjects) {
         const filteredSub = currentBusiness.academicConfig.subjects.filter(s => !selectedDept || !s.department || s.department === selectedDept);
         subjectSelect.innerHTML = '<option value="">-- Select Subject / Course Unit --</option>' +
-          filteredSub.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+          filteredSub.map(s => {
+            const sName = typeof s === 'object' ? s.name : s;
+            const sLabel = typeof s === 'object' && s.code ? `${s.name} (${s.code})` : sName;
+            return `<option value="${escapeHtml(sName)}">${escapeHtml(sLabel)}</option>`;
+          }).join('');
+
+        // Reset stale selection if previously selected subject is no longer in filtered list
+        const stillValidSub = filteredSub.some(s => (typeof s === 'object' ? s.name : s) === academicDetails.subject);
+        if (!stillValidSub) {
+          academicDetails.subject = '';
+          subjectSelect.value = '';
+        } else {
+          subjectSelect.value = academicDetails.subject;
+        }
       }
     }
   };

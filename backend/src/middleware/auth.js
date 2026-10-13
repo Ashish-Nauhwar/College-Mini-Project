@@ -1,18 +1,52 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
+const FORBIDDEN_SECRETS = [
+  'feedbackhub-super-secret-key-2026',
+  'feedbackhub-dev-secret-key-for-local-testing-min-32-chars',
+  'replace-with-a-very-secure-random-secret-key-at-least-32-chars',
+  'GENERATE_SECURE_SECRET_WITH_CRYPTO_RANDOMBYTES_32',
+  'your_jwt_secret_here',
+  'jwt_secret',
+  'secret',
+  'supersecret',
+  '12345678901234567890123456789012'
+];
+
+function validateJwtSecret(secret, isProd = process.env.NODE_ENV === 'production') {
+  if (!secret || typeof secret !== 'string') {
+    return { valid: false, reason: 'JWT_SECRET must be a non-empty string' };
+  }
+
+  const trimmed = secret.trim();
+
+  if (isProd) {
+    const lower = trimmed.toLowerCase();
+    for (const forbidden of FORBIDDEN_SECRETS) {
+      if (lower === forbidden.toLowerCase()) {
+        return { valid: false, reason: `JWT_SECRET matches known placeholder or default "${forbidden}". Please generate a unique cryptographic secret.` };
+      }
+    }
+    if (trimmed.length < 32) {
+      return { valid: false, reason: 'JWT_SECRET must be at least 32 characters in production' };
+    }
+  }
+
+  return { valid: true };
+}
+
 const isProd = process.env.NODE_ENV === 'production';
 let JWT_SECRET = process.env.JWT_SECRET;
 
-if (isProd) {
-  if (!JWT_SECRET || JWT_SECRET === 'feedbackhub-super-secret-key-2026' || JWT_SECRET.length < 32) {
-    console.error('\n===============================================================');
-    console.error(' [FATAL SECURITY ERROR] Insecure or missing JWT_SECRET in production!');
-    console.error(' JWT_SECRET must be explicitly configured in backend/.env with at least 32 characters.');
-    console.error('===============================================================\n');
-    process.exit(1);
-  }
-} else {
+const validation = validateJwtSecret(JWT_SECRET, isProd);
+if (isProd && !validation.valid) {
+  console.error('\n===============================================================');
+  console.error(' [FATAL SECURITY ERROR] Insecure or invalid JWT_SECRET in production!');
+  console.error(` ${validation.reason}`);
+  console.error(' Generate a secure secret using: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  console.error('===============================================================\n');
+  process.exit(1);
+} else if (!isProd) {
   if (!JWT_SECRET || JWT_SECRET.length < 16) {
     JWT_SECRET = 'feedbackhub-dev-secret-key-for-local-testing-min-32-chars';
   }
@@ -76,5 +110,7 @@ module.exports = {
   generateToken,
   verifyToken,
   requireAuth,
-  requireRole
+  requireRole,
+  validateJwtSecret,
+  FORBIDDEN_SECRETS
 };

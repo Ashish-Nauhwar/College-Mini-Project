@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { isDbConnected } = require('../config/db');
+const { calculateAverageRating } = require('../utils/analyticsHelper');
 
 // Protect all admin routes with superadmin role
 router.use(requireAuth);
@@ -26,9 +27,7 @@ router.get('/overview', async (req, res) => {
 
         const locations = await db.getLocations(b._id);
         const forms = await db.getForms(b._id);
-        const avg = bizFeedbacks.length > 0
-          ? (bizFeedbacks.reduce((s, f) => s + (f.rating || 0), 0) / bizFeedbacks.length).toFixed(1)
-          : '0.0';
+        const avg = calculateAverageRating(bizFeedbacks);
 
         return {
           id: bIdStr,

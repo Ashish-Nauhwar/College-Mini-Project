@@ -11,9 +11,13 @@
     "test:nps": "node backend/tests/nps-rating-tests.js",
     "test:injection": "node backend/tests/injection-validation-tests.js",
     "test:college": "node backend/tests/college-e2e-test.js",
+    "test:unit": "node backend/tests/phase4-unit-tests.js",
+    "test:safety": "node backend/tests/phase4-data-safety-tests.js",
+    "test:integration": "node backend/tests/real-mongo-integration-test.js",
     "test:responsive": "node backend/tests/cdp-responsive-test.js",
     "seed": "node backend/scripts/seed.js",
-    "migrate:mongo": "node backend/scripts/migrate-json-to-mongo.js"
+    "migrate:mongo": "node backend/scripts/migrate-json-to-mongo.js",
+    "bootstrap:superadmin": "node backend/scripts/bootstrap-superadmin.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
+const { isComplaint, calculateAverageRating, calculateNps } = require('../utils/analyticsHelper');
+
 // GET /api/analytics/dashboard (Authenticated - Multi-Tenant Scoped)
 router.get('/dashboard', requireAuth, async (req, res) => {
   try {
@@ -45,27 +47,15 @@ router.get('/dashboard', requireAuth, async (req, res) => {
 
     const total = list.length;
 
-    // Average Star Rating: calculate ONLY from feedbacks that have a rating
-    const ratedResponses = list.filter(fb => typeof fb.rating === 'number' && !isNaN(fb.rating));
-    const avgRating = ratedResponses.length > 0
-      ? (ratedResponses.reduce((acc, cur) => acc + cur.rating, 0) / ratedResponses.length).toFixed(1)
-      : 'N/A';
+    // Strict Average Star Rating via centralized helper
+    const avgRating = calculateAverageRating(list);
 
-    // Standard NPS Calculation (0-10 scale)
-    // 0-6: detractors, 7-8: passives, 9-10: promoters
-    // NPS = % promoters - % detractors
-    const npsResponses = list.filter(fb => typeof fb.nps === 'number' && !isNaN(fb.nps) && fb.nps >= 0 && fb.nps <= 10);
-    let npsScore = 'N/A';
-    let npsPromoters = 0;
-    let npsPassives = 0;
-    let npsDetractors = 0;
-
-    if (npsResponses.length > 0) {
-      npsPromoters = npsResponses.filter(fb => fb.nps >= 9).length;
-      npsPassives = npsResponses.filter(fb => fb.nps >= 7 && fb.nps <= 8).length;
-      npsDetractors = npsResponses.filter(fb => fb.nps <= 6).length;
-      npsScore = Math.round(((npsPromoters - npsDetractors) / npsResponses.length) * 100);
-    }
+    // Standard NPS Calculation via centralized helper
+    const npsData = calculateNps(list);
+    const npsScore = npsData.npsScore;
+    const npsPromoters = npsData.promoters;
+    const npsPassives = npsData.passives;
+    const npsDetractors = npsData.detractors;
 
     // Sentiment Breakdown
     const sentimentCounts = {
@@ -83,12 +73,8 @@ router.get('/dashboard', requireAuth, async (req, res) => {
       5: list.filter(fb => fb.rating === 5).length
     };
 
-    // Resolution metrics: negative rating (<=2), or negative NPS (<=6), or negative sentiment
-    const complaints = list.filter(fb =>
-      typeof fb.rating === 'number'
-        ? fb.rating <= 2
-        : (typeof fb.nps === 'number' ? fb.nps <= 6 : fb.sentiment === 'negative')
-    );
+    // Resolution metrics: evaluated using robust isComplaint helper
+    const complaints = list.filter(isComplaint);
     const resolvedComplaints = complaints.filter(fb => fb.status === 'resolved').length;
     const pendingComplaints = complaints.filter(fb => fb.status !== 'resolved').length;
     const resolutionRate = complaints.length > 0
@@ -108,7 +94,7 @@ router.get('/dashboard', requireAuth, async (req, res) => {
       const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       if (dateMap[key]) {
         dateMap[key].count += 1;
-        if (typeof fb.rating === 'number' && !isNaN(fb.rating)) {
+        if (typeof fb.rating === 'number' && Number.isFinite(fb.rating) && fb.rating >= 1 && fb.rating <= 5) {
           dateMap[key].ratedCount += 1;
           dateMap[key].totalRating += fb.rating;
         }
@@ -130,17 +116,14 @@ router.get('/dashboard', requireAuth, async (req, res) => {
         return fbLoc === locIdStr;
       });
 
-      const locRated = locFeedbacks.filter(f => typeof f.rating === 'number' && !isNaN(f.rating));
-      const locAvg = locRated.length > 0
-        ? (locRated.reduce((s, f) => s + f.rating, 0) / locRated.length).toFixed(1)
-        : 'N/A';
+      const locAvg = calculateAverageRating(locFeedbacks);
 
       return {
         id: locIdStr,
         name: loc.name,
         total: locFeedbacks.length,
         avgRating: locAvg,
-        pending: locFeedbacks.filter(f => f.status !== 'resolved' && (typeof f.rating === 'number' ? f.rating <= 2 : f.sentiment === 'negative')).length
+        pending: locFeedbacks.filter(f => f.status !== 'resolved' && isComplaint(f)).length
       };
     });
 
@@ -153,7 +136,7 @@ router.get('/dashboard', requireAuth, async (req, res) => {
           promoters: npsPromoters,
           passives: npsPassives,
           detractors: npsDetractors,
-          total: npsResponses.length
+          total: npsData.total
         },
         pendingComplaints,
         resolutionRate,

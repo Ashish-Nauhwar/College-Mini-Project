@@ -8,11 +8,15 @@ const assert = require('assert');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
+const http = require('http');
+const app = require('../server');
+
 // Import schemas and models
 const { User, Business, Location, FeedbackForm, Feedback, AuditLog } = require('../src/models');
 const { JWT_SECRET, generateToken, verifyToken } = require('../src/middleware/auth');
 
-const BASE_URL = 'http://localhost:3000';
+let server;
+let BASE_URL;
 
 let totalTests = 0;
 let passedTests = 0;
@@ -48,6 +52,16 @@ async function runSecurityTests() {
   console.log('\n======================================================');
   console.log('   FEEDBACKHUB SECURITY & AUTHORIZATION TEST SUITE   ');
   console.log('======================================================\n');
+
+  // Start ephemeral server on random available port
+  await new Promise((resolve) => {
+    server = http.createServer(app);
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      BASE_URL = `http://127.0.0.1:${port}`;
+      resolve();
+    });
+  });
 
   // SECTION 1: Health & Uptime
   console.log('--- 1. Health & Measured Uptime ---');
@@ -301,6 +315,10 @@ async function runSecurityTests() {
   console.log('\n======================================================');
   console.log(`   TEST SUMMARY: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)   `);
   console.log('======================================================\n');
+
+  if (server) {
+    server.close();
+  }
 
   if (failedTests > 0) {
     process.exit(1);
