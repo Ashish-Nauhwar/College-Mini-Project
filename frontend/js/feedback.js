@@ -1,11 +1,14 @@
-// FeedbackHub Public Feedback Form Client
+// FeedbackHub Public Customer & Student Feedback Form Client
+// 100% Dynamic, Non-Gated Reviews, College Academic Support, and Real-Time Conditional Logic
 
 (function () {
   'use strict';
 
   let currentForm = null;
+  let currentBusiness = null;
   let selectedRating = 0;
-  let dynamicAnswers = {};
+  const dynamicAnswers = {};
+  const academicDetails = {};
 
   const ratingDescriptions = {
     1: '1 Star - Poor Experience',
@@ -34,17 +37,19 @@
     try {
       const res = await fetch(`/api/forms/slug/${encodeURIComponent(slug)}`);
       if (!res.ok) {
-        throw new Error('Form not found or inactive');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Feedback form not found or inactive');
       }
 
       const data = await res.json();
       currentForm = data.form;
+      currentBusiness = data.business;
 
       // Populate branding
       if (data.business) {
         document.getElementById('bizLogo').textContent = data.business.logo || '🏢';
         document.getElementById('bizName').textContent = data.business.name;
-        document.title = `${data.business.name} - Customer Feedback`;
+        document.title = `${data.business.name} - Feedback`;
       }
       if (data.location) {
         document.getElementById('locName').textContent = `${data.location.name} • ${data.location.address}`;
@@ -56,17 +61,85 @@
         document.getElementById('formDescription').textContent = currentForm.description;
       }
 
+      // Render college academic context if enabled
+      renderCollegeFields(currentForm.collegeFieldsConfig, data.business?.academicConfig);
+
+      // Render all dynamic questions
       renderDynamicQuestions(currentForm.questions || []);
 
       loadingEl.classList.add('hidden');
       formEl.classList.remove('hidden');
       initStarSelector();
+      evaluateAllConditions();
     } catch (err) {
       loadingEl.classList.add('hidden');
       errorEl.classList.remove('hidden');
       document.getElementById('errorMessage').textContent = err.message || 'Unable to load feedback form.';
     }
   }
+
+  function renderCollegeFields(config, academicConfig) {
+    const section = document.getElementById('collegeFieldsSection');
+    const grid = document.getElementById('collegeFieldsGrid');
+    if (!section || !grid || !config) return;
+
+    const fields = [
+      { key: 'department', label: 'Department / Branch', enabled: config.departmentEnabled, required: config.departmentRequired, options: academicConfig?.departments || [] },
+      { key: 'course', label: 'Course / Program', enabled: config.courseEnabled, required: config.courseRequired, options: academicConfig?.courses || [] },
+      { key: 'academicYear', label: 'Academic Year', enabled: config.academicYearEnabled, required: config.academicYearRequired, options: ['2026-2027', '2025-2026', '2024-2025'] },
+      { key: 'yearOfStudy', label: 'Year of Study', enabled: config.yearOfStudyEnabled, required: config.yearOfStudyRequired, options: academicConfig?.years || ['1st Year', '2nd Year', '3rd Year', '4th Year'] },
+      { key: 'semester', label: 'Semester', enabled: config.semesterEnabled, required: config.semesterRequired, options: academicConfig?.semesters || ['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4', 'Semester 5', 'Semester 6', 'Semester 7', 'Semester 8'] },
+      { key: 'section', label: 'Class / Section', enabled: config.sectionEnabled, required: config.sectionRequired, options: academicConfig?.sections || ['Section A', 'Section B', 'Section C'] },
+      { key: 'faculty', label: 'Faculty Member', enabled: config.facultyEnabled, required: config.facultyRequired, options: (academicConfig?.faculty || []).map(f => f.name || f) },
+      { key: 'subject', label: 'Subject / Course Unit', enabled: config.subjectEnabled, required: config.subjectRequired, options: (academicConfig?.subjects || []).map(s => s.name ? `${s.name} (${s.code || ''})` : s) },
+      { key: 'category', label: 'Feedback Category', enabled: config.categoryEnabled, required: config.categoryRequired, options: ['Teaching & Pedagogy', 'Laboratory / Practical', 'Library Facilities', 'Hostel Facilities', 'Canteen & Food', 'Wi-Fi & Campus Internet', 'Cleanliness & Infrastructure'] }
+    ];
+
+    const activeFields = fields.filter(f => f.enabled);
+    if (activeFields.length === 0) {
+      section.classList.add('hidden');
+      return;
+    }
+
+    section.classList.remove('hidden');
+    grid.innerHTML = activeFields.map(f => `
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label" for="acad_${f.key}">
+          ${f.label} ${f.required ? '<span class="required">*</span>' : ''}
+        </label>
+        <select id="acad_${f.key}" class="form-select" onchange="window.updateAcademicField('${f.key}', this.value)">
+          <option value="">-- Select ${f.label} --</option>
+          ${f.options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
+        </select>
+        <div id="error_acad_${f.key}" class="form-error hidden">Please select ${f.label.toLowerCase()}</div>
+      </div>
+    `).join('');
+  }
+
+  window.updateAcademicField = function (key, value) {
+    academicDetails[key] = value;
+    const err = document.getElementById(`error_acad_${key}`);
+    if (err) err.classList.add('hidden');
+
+    // Filter faculty and subjects if department changed
+    if (key === 'department' && currentBusiness?.academicConfig) {
+      const selectedDept = value;
+      const facultySelect = document.getElementById('acad_faculty');
+      const subjectSelect = document.getElementById('acad_subject');
+
+      if (facultySelect && currentBusiness.academicConfig.faculty) {
+        const filteredFac = currentBusiness.academicConfig.faculty.filter(f => !selectedDept || !f.department || f.department === selectedDept);
+        facultySelect.innerHTML = '<option value="">-- Select Faculty Member --</option>' +
+          filteredFac.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
+      }
+
+      if (subjectSelect && currentBusiness.academicConfig.subjects) {
+        const filteredSub = currentBusiness.academicConfig.subjects.filter(s => !selectedDept || !s.department || s.department === selectedDept);
+        subjectSelect.innerHTML = '<option value="">-- Select Subject / Course Unit --</option>' +
+          filteredSub.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+      }
+    }
+  };
 
   function initStarSelector() {
     const buttons = document.querySelectorAll('.star-rating-btn');
@@ -81,6 +154,7 @@
         helperText.textContent = ratingDescriptions[val] || `${val} Stars`;
         helperText.style.color = 'var(--primary)';
         document.getElementById('ratingError').classList.add('hidden');
+        evaluateAllConditions();
       });
 
       btn.addEventListener('mouseenter', () => {
@@ -91,7 +165,6 @@
         updateStarsDisplay(selectedRating, false);
       });
 
-      // Keyboard support
       btn.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight' && index < buttons.length - 1) {
           buttons[index + 1].focus();
@@ -102,151 +175,217 @@
     });
   }
 
-  function updateStarsDisplay(ratingVal, isHover = false) {
+  function updateStarsDisplay(rating, isHover = false) {
     const buttons = document.querySelectorAll('.star-rating-btn');
     buttons.forEach((btn, index) => {
-      const val = index + 1;
-      if (val <= ratingVal) {
+      const starVal = index + 1;
+      if (starVal <= rating) {
         btn.classList.add('active');
         btn.style.color = '#f59e0b';
+        btn.style.transform = isHover ? 'scale(1.15)' : 'scale(1.05)';
       } else {
         btn.classList.remove('active');
         btn.style.color = '#cbd5e1';
+        btn.style.transform = 'scale(1)';
       }
     });
   }
 
   function renderDynamicQuestions(questions) {
     const container = document.getElementById('dynamicQuestionsContainer');
-    container.innerHTML = '';
+    if (!container) return;
 
-    questions.forEach((q) => {
-      // If question is the primary rating and already in markup, skip or configure
-      if (q.type === 'rating' && q.id === 'q1') {
-        document.getElementById('primaryRatingLabel').innerHTML =
-          `${escapeHtml(q.text)} <span class="required">*</span>`;
+    container.innerHTML = questions.map((q, idx) => {
+      return `
+        <div class="form-group question-group" id="qwrap_${q.id}" data-qid="${q.id}">
+          <label class="form-label" for="inp_${q.id}">
+            ${idx + 1}. ${escapeHtml(q.text)} ${q.required ? '<span class="required">*</span>' : ''}
+          </label>
+          ${q.description ? `<p class="text-muted text-sm" style="margin-top: -4px; margin-bottom: 6px;">${escapeHtml(q.description)}</p>` : ''}
+          <div class="question-control-wrapper">
+            ${renderQuestionControl(q)}
+          </div>
+          <div id="error_${q.id}" class="form-error hidden">This question is required</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderQuestionControl(q) {
+    switch (q.type) {
+      case 'rating': {
+        const max = q.max || 5;
+        const pills = [];
+        for (let i = 1; i <= max; i++) {
+          pills.push(`
+            <button type="button" class="btn btn-secondary btn-sm q-rating-pill" data-qid="${q.id}" data-val="${i}" onclick="window.setDynamicAnswer('${q.id}', ${i}, this)" style="min-width: 44px; min-height: 44px; font-weight: 700;">
+              ${i} ★
+            </button>
+          `);
+        }
+        return `<div style="display: flex; gap: 8px; flex-wrap: wrap;">${pills.join('')}</div>`;
+      }
+      case 'nps': {
+        const buttons = [];
+        for (let i = 0; i <= 10; i++) {
+          buttons.push(`
+            <button type="button" class="nps-btn" data-qid="${q.id}" data-val="${i}" onclick="window.setDynamicAnswer('${q.id}', ${i}, this)" style="min-width: 44px; min-height: 44px;">
+              ${i}
+            </button>
+          `);
+        }
+        return `
+          <div class="nps-scale-wrapper" style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px;">
+            ${buttons.join('')}
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--neutral-500); margin-top: 4px;">
+            <span>0 = Not Likely</span>
+            <span>10 = Extremely Likely</span>
+          </div>
+        `;
+      }
+      case 'choice': {
+        const options = q.options || [];
+        return `
+          <div class="choice-chips-container" style="display: flex; flex-direction: column; gap: 8px;">
+            ${options.map((opt, optIdx) => `
+              <label class="choice-chip-card" style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #ffffff; border: 1.5px solid var(--neutral-200); border-radius: var(--radius-md); cursor: pointer; min-height: 44px;">
+                <input type="radio" name="radio_${q.id}" value="${escapeHtml(opt)}" onchange="window.setDynamicAnswer('${q.id}', this.value)" style="width: 18px; height: 18px;">
+                <span style="font-size: 0.95rem;">${escapeHtml(opt)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
+      case 'select': {
+        const options = q.options || [];
+        return `
+          <select id="inp_${q.id}" class="form-select" onchange="window.setDynamicAnswer('${q.id}', this.value)">
+            <option value="">-- Please select an option --</option>
+            ${options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
+          </select>
+        `;
+      }
+      case 'checkbox': {
+        const options = q.options || [];
+        return `
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${options.map(opt => `
+              <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #ffffff; border: 1px solid var(--neutral-200); border-radius: var(--radius-md); cursor: pointer; min-height: 44px;">
+                <input type="checkbox" data-qid="${q.id}" value="${escapeHtml(opt)}" onchange="window.toggleCheckboxAnswer('${q.id}', this.value, this.checked)" style="width: 18px; height: 18px;">
+                <span style="font-size: 0.95rem;">${escapeHtml(opt)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      }
+      case 'yesno': {
+        return `
+          <div style="display: flex; gap: 12px;">
+            <button type="button" class="btn btn-secondary q-yesno-btn" data-qid="${q.id}" data-val="Yes" onclick="window.setDynamicAnswer('${q.id}', 'Yes', this)" style="flex: 1; min-height: 46px; font-weight: 600;">
+              👍 Yes
+            </button>
+            <button type="button" class="btn btn-secondary q-yesno-btn" data-qid="${q.id}" data-val="No" onclick="window.setDynamicAnswer('${q.id}', 'No', this)" style="flex: 1; min-height: 46px; font-weight: 600;">
+              👎 No
+            </button>
+          </div>
+        `;
+      }
+      case 'number': {
+        return `
+          <input type="number" id="inp_${q.id}" class="form-input" placeholder="e.g. 42" oninput="window.setDynamicAnswer('${q.id}', Number(this.value))">
+        `;
+      }
+      case 'date': {
+        return `
+          <input type="date" id="inp_${q.id}" class="form-input" onchange="window.setDynamicAnswer('${q.id}', this.value)">
+        `;
+      }
+      case 'email': {
+        return `
+          <input type="email" id="inp_${q.id}" class="form-input" placeholder="student@example.com" oninput="window.setDynamicAnswer('${q.id}', this.value.trim())">
+        `;
+      }
+      case 'phone': {
+        return `
+          <input type="tel" id="inp_${q.id}" class="form-input" placeholder="+91 98765 43210" oninput="window.setDynamicAnswer('${q.id}', this.value.trim())">
+        `;
+      }
+      case 'multiline': {
+        return `
+          <textarea id="inp_${q.id}" class="form-textarea" rows="3" placeholder="${escapeHtml(q.placeholder || 'Type your comments here...')}" oninput="window.setDynamicAnswer('${q.id}', this.value.trim())"></textarea>
+        `;
+      }
+      case 'text':
+      default: {
+        return `
+          <input type="text" id="inp_${q.id}" class="form-input" placeholder="${escapeHtml(q.placeholder || 'Your response...')}" oninput="window.setDynamicAnswer('${q.id}', this.value.trim())">
+        `;
+      }
+    }
+  }
+
+  window.setDynamicAnswer = function (qid, value, btnEl) {
+    dynamicAnswers[qid] = value;
+    clearFieldError(qid);
+
+    if (btnEl) {
+      const siblings = btnEl.parentElement.querySelectorAll(`[data-qid="${qid}"]`);
+      siblings.forEach(s => {
+        s.classList.remove('btn-primary', 'active');
+        s.classList.add('btn-secondary');
+      });
+      btnEl.classList.remove('btn-secondary');
+      btnEl.classList.add('btn-primary', 'active');
+    }
+
+    evaluateAllConditions();
+  };
+
+  window.toggleCheckboxAnswer = function (qid, value, isChecked) {
+    if (!Array.isArray(dynamicAnswers[qid])) {
+      dynamicAnswers[qid] = [];
+    }
+    if (isChecked) {
+      if (!dynamicAnswers[qid].includes(value)) dynamicAnswers[qid].push(value);
+    } else {
+      dynamicAnswers[qid] = dynamicAnswers[qid].filter(v => v !== value);
+    }
+    clearFieldError(qid);
+    evaluateAllConditions();
+  };
+
+  function evaluateAllConditions() {
+    if (!currentForm || !currentForm.questions) return;
+
+    currentForm.questions.forEach(q => {
+      const wrap = document.getElementById(`qwrap_${q.id}`);
+      if (!wrap) return;
+
+      if (!q.conditional || !q.conditional.dependsOn) {
+        wrap.classList.remove('hidden');
         return;
       }
 
-      const group = document.createElement('div');
-      group.className = 'form-group';
-      group.id = `group_${q.id}`;
+      const parentVal = dynamicAnswers[q.conditional.dependsOn];
+      const target = q.conditional.value;
+      const op = q.conditional.operator || 'equals';
+      let satisfied = false;
 
-      const label = document.createElement('label');
-      label.className = 'form-label';
-      label.innerHTML = `${escapeHtml(q.text)}${q.required ? ' <span class="required">*</span>' : ''}`;
-      group.appendChild(label);
-
-      if (q.type === 'nps') {
-        const npsWrap = document.createElement('div');
-        npsWrap.className = 'nps-selector';
-        npsWrap.setAttribute('role', 'radiogroup');
-
-        for (let i = 0; i <= 10; i++) {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'nps-btn';
-          btn.textContent = i;
-          btn.setAttribute('aria-label', `Score ${i}`);
-          btn.addEventListener('click', () => {
-            dynamicAnswers[q.id] = i;
-            npsWrap.querySelectorAll('.nps-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            clearFieldError(q.id);
-          });
-          npsWrap.appendChild(btn);
-        }
-        group.appendChild(npsWrap);
-
-        const npsLabels = document.createElement('div');
-        npsLabels.style.display = 'flex';
-        npsLabels.style.justifyContent = 'space-between';
-        npsLabels.style.fontSize = '0.75rem';
-        npsLabels.style.color = 'var(--neutral-500)';
-        npsLabels.style.marginTop = '4px';
-        npsLabels.innerHTML = '<span>0 = Not likely</span><span>10 = Extremely likely</span>';
-        group.appendChild(npsLabels);
-
-      } else if (q.type === 'choice' && Array.isArray(q.options)) {
-        const chipsWrap = document.createElement('div');
-        chipsWrap.className = 'choice-chips';
-
-        q.options.forEach((opt) => {
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'choice-chip';
-          chip.textContent = opt;
-          chip.addEventListener('click', () => {
-            dynamicAnswers[q.id] = opt;
-            chipsWrap.querySelectorAll('.choice-chip').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            clearFieldError(q.id);
-          });
-          chipsWrap.appendChild(chip);
-        });
-        group.appendChild(chipsWrap);
-
-      } else if (q.type === 'yesno') {
-        const toggleWrap = document.createElement('div');
-        toggleWrap.className = 'yesno-toggle';
-
-        const yesBtn = document.createElement('button');
-        yesBtn.type = 'button';
-        yesBtn.className = 'yesno-btn';
-        yesBtn.innerHTML = '<span>👍</span> Yes';
-        yesBtn.addEventListener('click', () => {
-          dynamicAnswers[q.id] = 'yes';
-          noBtn.classList.remove('active-no');
-          yesBtn.classList.add('active-yes');
-          clearFieldError(q.id);
-        });
-
-        const noBtn = document.createElement('button');
-        noBtn.type = 'button';
-        noBtn.className = 'yesno-btn';
-        noBtn.innerHTML = '<span>👎</span> No';
-        noBtn.addEventListener('click', () => {
-          dynamicAnswers[q.id] = 'no';
-          yesBtn.classList.remove('active-yes');
-          noBtn.classList.add('active-no');
-          clearFieldError(q.id);
-        });
-
-        toggleWrap.appendChild(yesBtn);
-        toggleWrap.appendChild(noBtn);
-        group.appendChild(toggleWrap);
-
-      } else if (q.type === 'text' || q.multiline) {
-        const textarea = document.createElement('textarea');
-        textarea.className = 'form-textarea';
-        textarea.placeholder = q.placeholder || 'Your thoughts...';
-        textarea.rows = 3;
-        textarea.addEventListener('input', (e) => {
-          dynamicAnswers[q.id] = e.target.value;
-          clearFieldError(q.id);
-        });
-        group.appendChild(textarea);
-
-      } else {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'form-input';
-        input.placeholder = q.placeholder || '';
-        input.addEventListener('input', (e) => {
-          dynamicAnswers[q.id] = e.target.value;
-          clearFieldError(q.id);
-        });
-        group.appendChild(input);
+      if (parentVal !== undefined && parentVal !== null) {
+        if (op === 'equals') satisfied = String(parentVal).trim() === String(target).trim();
+        else if (op === 'not_equals') satisfied = String(parentVal).trim() !== String(target).trim();
+        else if (op === 'in' && Array.isArray(target)) satisfied = target.some(t => String(t).trim() === String(parentVal).trim());
+        else if (op === 'greater_than') satisfied = Number(parentVal) > Number(target);
+        else if (op === 'less_than') satisfied = Number(parentVal) < Number(target);
       }
 
-      // Error message container for dynamic field
-      const err = document.createElement('div');
-      err.className = 'form-error hidden';
-      err.id = `error_${q.id}`;
-      err.textContent = 'This field is required';
-      group.appendChild(err);
-
-      container.appendChild(group);
+      if (satisfied) {
+        wrap.classList.remove('hidden');
+      } else {
+        wrap.classList.add('hidden');
+        delete dynamicAnswers[q.id];
+      }
     });
   }
 
@@ -270,13 +409,33 @@
       document.getElementById('ratingError').classList.add('hidden');
     }
 
-    // Validate Required Dynamic Questions
+    // Validate College Fields if required
+    const cfConfig = currentForm?.collegeFieldsConfig || {};
+    if (cfConfig.departmentRequired && !academicDetails.department) {
+      const err = document.getElementById('error_acad_department');
+      if (err) err.classList.remove('hidden');
+      hasErrors = true;
+    }
+    if (cfConfig.facultyRequired && !academicDetails.faculty) {
+      const err = document.getElementById('error_acad_faculty');
+      if (err) err.classList.remove('hidden');
+      hasErrors = true;
+    }
+    if (cfConfig.subjectRequired && !academicDetails.subject) {
+      const err = document.getElementById('error_acad_subject');
+      if (err) err.classList.remove('hidden');
+      hasErrors = true;
+    }
+
+    // Validate Required Dynamic Questions that are currently visible
     if (currentForm && currentForm.questions) {
       currentForm.questions.forEach((q) => {
-        if (q.type === 'rating' && q.id === 'q1') return;
-        if (q.required) {
+        const wrap = document.getElementById(`qwrap_${q.id}`);
+        const isVisible = wrap && !wrap.classList.contains('hidden');
+
+        if (isVisible && q.required) {
           const val = dynamicAnswers[q.id];
-          if (val === undefined || val === null || val === '') {
+          if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
             const err = document.getElementById(`error_${q.id}`);
             if (err) err.classList.remove('hidden');
             hasErrors = true;
@@ -296,7 +455,6 @@
     }
 
     if (hasErrors) {
-      // Scroll to first error
       const firstError = document.querySelector('.form-error:not(.hidden)');
       if (firstError) {
         firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -309,20 +467,31 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Submitting Feedback...';
 
+    // Find general comments from dynamic answers or dedicated field
+    let generalComments = '';
+    for (const [key, val] of Object.entries(dynamicAnswers)) {
+      const qObj = (currentForm.questions || []).find(q => q.id === key);
+      if (qObj && qObj.type === 'multiline') {
+        generalComments = String(val);
+        break;
+      }
+    }
+
     const payload = {
-      formId: currentForm.id,
+      formId: currentForm._id || currentForm.id,
       rating: selectedRating,
-      nps: dynamicAnswers['q2'] !== undefined ? dynamicAnswers['q2'] : null,
-      customerName: document.getElementById('customerName').value,
+      customerName: document.getElementById('customerName').value.trim() || 'Anonymous',
       customerEmail: emailVal,
-      customerPhone: document.getElementById('customerPhone').value,
-      comments: dynamicAnswers['q5'] || dynamicAnswers['comments'] || '',
+      customerPhone: document.getElementById('customerPhone').value.trim(),
+      academicDetails: Object.keys(academicDetails).length > 0 ? academicDetails : null,
+      comments: generalComments,
       answers: dynamicAnswers,
       source: 'Mobile Browser QR Scan'
     };
 
     try {
-      const res = await fetch('/api/feedback/submit', {
+      const slug = getSlugFromUrl();
+      const res = await fetch(`/api/feedback/submit/${encodeURIComponent(slug)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -338,13 +507,13 @@
       const successCard = document.getElementById('successCard');
       successCard.classList.remove('hidden');
 
-      document.getElementById('successHeading').textContent = result.isPositive
+      document.getElementById('successHeading').textContent = result.rating >= 4
         ? 'Thank You So Much!'
         : 'Thank You for Your Feedback';
 
       document.getElementById('successMessage').textContent = result.message;
 
-      // Google Review prompt
+      // NON-GATED GOOGLE REVIEW CTA: Show to ALL respondents if configured!
       if (result.showGoogleReview && result.googleReviewUrl) {
         const cta = document.getElementById('googleReviewCta');
         const btn = document.getElementById('googleReviewBtn');
@@ -352,7 +521,6 @@
         cta.classList.remove('hidden');
       }
 
-      // Smooth scroll to top of card
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (err) {
@@ -366,7 +534,7 @@
 
   function escapeHtml(str) {
     if (!str) return '';
-    return str.replace(/[&<>"']/g, function (m) {
+    return String(str).replace(/[&<>"']/g, function (m) {
       return ({
         '&': '&amp;',
         '<': '&lt;',
@@ -377,6 +545,6 @@
     });
   }
 
-  // Initialize on load
+  // Self initialize on DOM load
   document.addEventListener('DOMContentLoaded', loadForm);
 })();

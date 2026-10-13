@@ -6,13 +6,18 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "node --watch backend/server.js",
-    "test": "node backend/tests/cdp-responsive-test.js",
-    "test:responsive": "node backend/tests/cdp-responsive-test.js"
+    "test": "node backend/tests/run-all-tests.js",
+    "test:security": "node backend/tests/security-tests.js",
+    "test:responsive": "node backend/tests/cdp-responsive-test.js",
+    "seed": "node backend/scripts/seed.js",
+    "migrate:mongo": "node backend/scripts/migrate-json-to-mongo.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.6.3"
   }
 }

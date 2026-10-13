@@ -1,23 +1,41 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'feedbackhub-super-secret-key-2026';
+const isProd = process.env.NODE_ENV === 'production';
+let JWT_SECRET = process.env.JWT_SECRET;
+
+if (isProd) {
+  if (!JWT_SECRET || JWT_SECRET === 'feedbackhub-super-secret-key-2026' || JWT_SECRET.length < 32) {
+    console.error('\n===============================================================');
+    console.error(' [FATAL SECURITY ERROR] Insecure or missing JWT_SECRET in production!');
+    console.error(' JWT_SECRET must be explicitly configured in backend/.env with at least 32 characters.');
+    console.error('===============================================================\n');
+    process.exit(1);
+  }
+} else {
+  if (!JWT_SECRET || JWT_SECRET.length < 16) {
+    JWT_SECRET = 'feedbackhub-dev-secret-key-for-local-testing-min-32-chars';
+  }
+}
 
 function generateToken(user) {
+  const userId = user._id ? user._id.toString() : user.id;
+  const businessId = user.businessId
+    ? (user.businessId._id ? user.businessId._id.toString() : user.businessId.toString())
+    : null;
+
   return jwt.sign(
     {
-      id: user.id,
-      email: user.email,
-      name: user.name,
+      id: userId,
       role: user.role,
-      businessId: user.businessId
+      businessId: businessId
     },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -26,7 +44,7 @@ function requireAuth(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = db.findUserById(decoded.id);
+    const user = await db.findUserById(decoded.id);
     if (!user) {
       return res.status(401).json({ error: 'User not found or session expired' });
     }
@@ -49,9 +67,14 @@ function requireRole(...allowedRoles) {
   };
 }
 
+function verifyToken(token, secret = JWT_SECRET) {
+  return jwt.verify(token, secret);
+}
+
 module.exports = {
   JWT_SECRET,
   generateToken,
+  verifyToken,
   requireAuth,
   requireRole
 };

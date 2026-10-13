@@ -48,7 +48,7 @@
       <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
         <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('owner')" style="justify-content: flex-start;">👩‍💼 Sarah (Owner)</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('manager')" style="justify-content: flex-start;">👨‍💼 Marcus (Manager)</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('superadmin')" style="justify-content: flex-start;">🛡️ Super Admin</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('college')" style="justify-content: flex-start;">🎓 Dr. Sharma (College)</button>
       </div>
       <button type="button" class="btn btn-secondary btn-block btn-sm" onclick="app.logout()">Log Out</button>
     </div>
@@ -88,7 +88,7 @@
         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('owner')" style="justify-content: flex-start;">👩‍💼 Sarah (Owner)</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('manager')" style="justify-content: flex-start;">👨‍💼 Marcus (Manager)</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('superadmin')" style="justify-content: flex-start;">🛡️ Super Admin</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('college')" style="justify-content: flex-start;">🎓 Dr. Sharma (College)</button>
         </div>
         <button type="button" class="btn btn-secondary btn-block btn-sm" onclick="app.logout()">Log Out</button>
       </div>
@@ -189,15 +189,18 @@
               </p>
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 <button type="button" class="btn btn-primary btn-sm btn-block" onclick="app.switchDemo('owner')">
-                  👩‍💼 Business Owner (Sarah)
+                  👩‍💼 Business Owner (Sarah - Apex Cafe)
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-block" onclick="app.switchDemo('manager')">
-                  👨‍💼 Location Manager (Marcus)
+                  👨‍💼 Location Manager (Marcus - Downtown)
                 </button>
-                <button type="button" class="btn btn-secondary btn-sm btn-block" onclick="app.switchDemo('superadmin')">
-                  🛡️ Super Admin (Full Control)
+                <button type="button" class="btn btn-secondary btn-sm btn-block" onclick="app.switchDemo('college')">
+                  🎓 College Admin (Dr. Sharma - Apex Institute)
                 </button>
               </div>
+              <p style="font-size: 0.72rem; color: var(--neutral-600); margin-top: 8px; line-height: 1.3;">
+                🛡️ <em>Super Admin requires explicit sign in below: <code>admin@feedbackhub.com</code> / <code>Admin@123</code>. Escalation via 1-click is locked for production security.</em>
+              </p>
             </div>
 
             <form id="loginForm" novalidate>
@@ -231,32 +234,90 @@
 
             <form id="registerForm" novalidate>
               <div class="form-group">
-                <label class="form-label" for="regBizName">Business / Brand Name <span class="required">*</span></label>
-                <input type="text" id="regBizName" class="form-input" required placeholder="e.g. Blue Lagoon Bistro">
+                <label class="form-label" for="regBizName">Business / Institution Name <span class="required">*</span></label>
+                <input type="text" id="regBizName" class="form-input" required placeholder="e.g. Apex Institute of Technology or Blue Lagoon Bistro">
               </div>
+
               <div class="form-group">
-                <label class="form-label" for="regCategory">Industry / Category</label>
-                <select id="regCategory" class="form-select">
-                  <option value="Cafe & Restaurant">Cafe &amp; Restaurant</option>
-                  <option value="Retail & Boutique">Retail &amp; Boutique</option>
-                  <option value="Healthcare & Clinic">Healthcare &amp; Clinic</option>
-                  <option value="Hospitality & Hotel">Hospitality &amp; Hotel</option>
-                  <option value="Fitness & Gym">Fitness &amp; Gym</option>
-                  <option value="Services & Other">Services &amp; Other</option>
+                <label class="form-label" for="regBizType">Business Type <span class="required">*</span></label>
+                <select id="regBizType" class="form-select">
+                  <option value="college">🎓 College or University</option>
+                  <option value="coaching">📚 Coaching Institute</option>
+                  <option value="restaurant">🍽️ Restaurant or Cafe</option>
+                  <option value="healthcare">🏥 Healthcare or Clinic</option>
+                  <option value="salon">✂️ Salon or Service Business</option>
+                  <option value="other">🏢 Other Enterprise</option>
                 </select>
               </div>
+
               <div class="form-group">
-                <label class="form-label" for="regOwnerName">Your Name <span class="required">*</span></label>
-                <input type="text" id="regOwnerName" class="form-input" required placeholder="e.g. Jordan Smith">
+                <label class="form-label" for="regCategory">Industry / Department Category</label>
+                <input type="text" id="regCategory" class="form-input" placeholder="e.g. Engineering &amp; Management / Specialty Dining">
               </div>
+
+              <div class="form-group">
+                <label class="form-label" for="regOwnerName">Administrator / Owner Name <span class="required">*</span></label>
+                <input type="text" id="regOwnerName" class="form-input" required placeholder="e.g. Dr. Rajesh Sharma">
+              </div>
+
               <div class="form-group">
                 <label class="form-label" for="regEmail">Email Address <span class="required">*</span></label>
-                <input type="email" id="regEmail" class="form-input" required placeholder="jordan@bluelagoon.com">
+                <input type="email" id="regEmail" class="form-input" required placeholder="admin@apexinstitute.edu">
               </div>
+
               <div class="form-group">
                 <label class="form-label" for="regPassword">Password <span class="required">*</span></label>
                 <input type="password" id="regPassword" class="form-input" required placeholder="Minimum 6 characters">
               </div>
+
+              <div class="form-group">
+                <label class="form-label" for="regPhone">Contact Phone Number</label>
+                <input type="tel" id="regPhone" class="form-input" placeholder="+91 98765 43210">
+              </div>
+
+              <div class="form-group" style="background-color: var(--neutral-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="checkbox" id="regIsOnlineOnly" style="width: 18px; height: 18px; cursor: pointer;" onchange="app.toggleRegisterAddress(this.checked)">
+                  <label for="regIsOnlineOnly" class="form-label" style="margin: 0; cursor: pointer; font-size: 0.9rem;">
+                    Purely online or digital service (no physical campus or street premises)
+                  </label>
+                </div>
+              </div>
+
+              <div id="regAddressBlock" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label" for="regAddressLine1">Address Line 1 <span class="required">*</span></label>
+                  <input type="text" id="regAddressLine1" class="form-input" placeholder="e.g. Knowledge Park III, Plot 12">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="regAddressLine2">Address Line 2 (Optional)</label>
+                  <input type="text" id="regAddressLine2" class="form-input" placeholder="e.g. Block B, Sector 62">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div class="form-group">
+                    <label class="form-label" for="regCity">City <span class="required">*</span></label>
+                    <input type="text" id="regCity" class="form-input" placeholder="e.g. Greater Noida">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="regState">State <span class="required">*</span></label>
+                    <input type="text" id="regState" class="form-input" placeholder="e.g. Uttar Pradesh">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div class="form-group">
+                    <label class="form-label" for="regPostalCode">PIN / Postal Code <span class="required">*</span></label>
+                    <input type="text" id="regPostalCode" class="form-input" placeholder="e.g. 201310">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="regCountry">Country</label>
+                    <input type="text" id="regCountry" class="form-input" value="India">
+                  </div>
+                </div>
+              </div>
+
               <div id="regError" class="form-error hidden"></div>
               <button type="submit" class="btn btn-primary btn-block mt-4">Create Account &amp; Start</button>
             </form>
@@ -403,6 +464,10 @@
               <select id="inboxLocationFilter" class="form-select" style="min-width: 140px; min-height: 38px; padding: 6px 10px;" onchange="app.filterInbox()">
                 <option value="all">All Locations</option>
               </select>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.exportCsv()" style="display: inline-flex; align-items: center; gap: 6px; min-height: 38px; white-space: nowrap;">
+                📥 Export CSV
+              </button>
             </div>
           </div>
 
@@ -463,6 +528,29 @@
             </div>
           </div>
 
+          <!-- Starter Template Selector -->
+          <div class="card" style="margin-bottom: 18px; background-color: var(--primary-light); border-color: #c7d2fe;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <strong style="color: var(--primary-text); font-size: 0.95rem;">⚡ Instant Starter Form Templates:</strong>
+                <p class="text-sm text-muted" style="margin: 0;">Apply pre-built, role-tested question templates in one click.</p>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <select id="builderTemplateSelect" class="form-select" style="min-width: 220px; min-height: 38px;">
+                  <option value="college">🎓 College Academic &amp; Course Evaluation</option>
+                  <option value="faculty">👨‍🏫 Faculty &amp; Teaching Evaluation</option>
+                  <option value="facilities">🏛️ Campus &amp; Facilities Feedback</option>
+                  <option value="restaurant">🍽️ Restaurant &amp; Dining Experience</option>
+                  <option value="coaching">📚 Coaching &amp; Test Prep Evaluation</option>
+                  <option value="general">💼 General Customer Feedback</option>
+                </select>
+                <button type="button" class="btn btn-primary btn-sm" onclick="app.applySelectedTemplate()">
+                  Apply Template
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Form Settings Card -->
           <div class="card" style="margin-bottom: 18px;">
             <h3 class="h3" style="margin-bottom: 14px;">Form General Settings</h3>
@@ -486,17 +574,65 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="builderStatus">Accepting Responses (Status)</label>
+                  <label class="form-label" for="builderStatus">Accepting Responses (Lifecycle Status)</label>
                   <select id="builderStatus" class="form-select">
                     <option value="published">🟢 Published (Active &amp; Accepting Responses)</option>
+                    <option value="draft">📝 Draft (Work in Progress)</option>
                     <option value="paused">⏸️ Paused (Temporarily Closed)</option>
+                    <option value="archived">📦 Archived</option>
                   </select>
                 </div>
               </div>
 
               <div class="form-group">
-                <label class="form-label" for="builderGoogleUrl">Google Review Link (for 4 &amp; 5-star redirection)</label>
+                <label class="form-label" for="builderGoogleUrl">Google Review / Profile Link (Optional invitation shown to all respondents)</label>
                 <input type="url" id="builderGoogleUrl" class="form-input" placeholder="https://g.page/r/your-business/review">
+              </div>
+            </div>
+          </div>
+
+          <!-- College & Academic Fields Configuration Card -->
+          <div class="card" style="margin-bottom: 18px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <h3 class="h3" style="font-size: 1.1rem; margin: 0;">🎓 College &amp; Academic Details Configuration</h3>
+            </div>
+            <p class="text-sm text-muted" style="margin-bottom: 14px;">
+              Enable academic fields captured dynamically on student feedback submissions (e.g. for student evaluation of faculty and courses).
+            </p>
+            <div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgDept" style="width: 18px; height: 18px;"> Department
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgCourse" style="width: 18px; height: 18px;"> Course / Degree
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgAcadYear" style="width: 18px; height: 18px;"> Academic Year
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgYearOfStudy" style="width: 18px; height: 18px;"> Year of Study
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgSemester" style="width: 18px; height: 18px;"> Semester
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgSection" style="width: 18px; height: 18px;"> Section / Batch
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgFaculty" style="width: 18px; height: 18px;"> Faculty Name
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgSubject" style="width: 18px; height: 18px;"> Subject / Unit
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer;">
+                  <input type="checkbox" id="cfgCategory" style="width: 18px; height: 18px;"> Feedback Category
+                </label>
+              </div>
+              <div style="border-top: 1px solid var(--neutral-200); padding-top: 10px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 600;">
+                  <input type="checkbox" id="cfgAllowAnonymous" style="width: 18px; height: 18px;"> Allow Anonymous Submissions (Student name and contact info become optional)
+                </label>
               </div>
             </div>
           </div>
@@ -629,36 +765,129 @@
              VIEW: SETTINGS
              ========================================== -->
         <section id="view-settings" class="hidden">
-          <div class="card" style="max-width: 600px; margin: 0 auto;">
-            <h2 class="h2" style="margin-bottom: 16px;">Business Profile Settings</h2>
-            <form id="settingsForm" onsubmit="app.saveSettings(event)">
-              <div class="form-group">
-                <label class="form-label" for="setBizName">Business Name</label>
-                <input type="text" id="setBizName" class="form-input" required>
-              </div>
+          <div style="max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+            <div class="card">
+              <h2 class="h2" style="margin-bottom: 16px;">Business &amp; Campus Profile Settings</h2>
+              <form id="settingsForm" onsubmit="app.saveSettings(event)">
+                <div class="form-group">
+                  <label class="form-label" for="setBizName">Business / Institution Name <span class="required">*</span></label>
+                  <input type="text" id="setBizName" class="form-input" required>
+                </div>
 
-              <div class="form-group">
-                <label class="form-label" for="setCategory">Category</label>
-                <input type="text" id="setCategory" class="form-input">
-              </div>
+                <div class="form-group">
+                  <label class="form-label" for="setCategory">Category / Industry</label>
+                  <input type="text" id="setCategory" class="form-input">
+                </div>
 
-              <div class="form-group">
-                <label class="form-label" for="setEmail">Contact Email</label>
-                <input type="email" id="setEmail" class="form-input">
-              </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                  <div class="form-group">
+                    <label class="form-label" for="setEmail">Contact Email</label>
+                    <input type="email" id="setEmail" class="form-input">
+                  </div>
 
-              <div class="form-group">
-                <label class="form-label" for="setPhone">Phone</label>
-                <input type="tel" id="setPhone" class="form-input">
-              </div>
+                  <div class="form-group">
+                    <label class="form-label" for="setPhone">Phone</label>
+                    <input type="tel" id="setPhone" class="form-input">
+                  </div>
+                </div>
 
-              <div class="form-group">
-                <label class="form-label" for="setAddress">Headquarters Address</label>
-                <textarea id="setAddress" class="form-textarea" rows="2"></textarea>
-              </div>
+                <div class="form-group" style="background-color: var(--neutral-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200); margin-top: 6px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="setIsOnlineOnly" style="width: 18px; height: 18px; cursor: pointer;" onchange="app.toggleSettingsAddress(this.checked)">
+                    <label for="setIsOnlineOnly" class="form-label" style="margin: 0; cursor: pointer; font-size: 0.9rem;">
+                      Online-only or non-physical enterprise (no street headquarters)
+                    </label>
+                  </div>
+                </div>
 
-              <button type="submit" class="btn btn-primary btn-block mt-4">Save Profile Updates</button>
-            </form>
+                <div id="setAddressBlock" style="display: flex; flex-direction: column; gap: 12px;">
+                  <div class="form-group">
+                    <label class="form-label" for="setAddressLine1">Address Line 1</label>
+                    <input type="text" id="setAddressLine1" class="form-input" placeholder="Building, Street, Landmark">
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label" for="setAddressLine2">Address Line 2 (Optional)</label>
+                    <input type="text" id="setAddressLine2" class="form-input" placeholder="Suite, Floor, Campus Wing">
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                      <label class="form-label" for="setCity">City</label>
+                      <input type="text" id="setCity" class="form-input">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="setState">State</label>
+                      <input type="text" id="setState" class="form-input">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                      <label class="form-label" for="setPostalCode">Postal / PIN Code</label>
+                      <input type="text" id="setPostalCode" class="form-input">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="setCountry">Country</label>
+                      <input type="text" id="setCountry" class="form-input" value="India">
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block mt-4">Save Profile Updates</button>
+              </form>
+            </div>
+
+            <!-- College / Academic Master Data Configuration Card -->
+            <div class="card" id="academicManagementCard">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                <h3 class="h3" style="font-size: 1.15rem; margin: 0;">🎓 Academic Master Data Management</h3>
+                <span class="badge badge-positive">College &amp; Institute</span>
+              </div>
+              <p class="text-sm text-muted" style="margin-bottom: 16px;">
+                Configure the departments, courses, faculty, and subjects available across student feedback forms.
+              </p>
+
+              <form id="academicConfigForm" onsubmit="app.saveAcademicConfig(event)">
+                <div class="form-group">
+                  <label class="form-label" for="acadDepts">Departments (comma-separated)</label>
+                  <textarea id="acadDepts" class="form-textarea" rows="2" placeholder="Computer Science &amp; Engineering, Information Technology, Electronics, Mechanical"></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="acadCourses">Courses / Programs (comma-separated)</label>
+                  <textarea id="acadCourses" class="form-textarea" rows="2" placeholder="B.Tech, M.Tech, BCA, MCA, MBA"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div class="form-group">
+                    <label class="form-label" for="acadYears">Academic Years (comma-separated)</label>
+                    <input type="text" id="acadYears" class="form-input" placeholder="2025-2026, 2026-2027">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="acadSemesters">Semesters (comma-separated)</label>
+                    <input type="text" id="acadSemesters" class="form-input" placeholder="Sem 1, Sem 2, Sem 3, Sem 4, Sem 5, Sem 6, Sem 7, Sem 8">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="acadSections">Sections / Batches (comma-separated)</label>
+                  <input type="text" id="acadSections" class="form-input" placeholder="Section A, Section B, Section C">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="acadFaculty">Faculty Members (format: Name | Department, one per line)</label>
+                  <textarea id="acadFaculty" class="form-textarea" rows="4" placeholder="Dr. Rajesh Sharma | Computer Science &amp; Engineering&#10;Prof. Ananya Verma | Information Technology&#10;Dr. Vikram Mehta | Electronics"></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="acadSubjects">Subjects / Courses (format: Name | Department, one per line)</label>
+                  <textarea id="acadSubjects" class="form-textarea" rows="4" placeholder="Data Structures &amp; Algorithms | Computer Science &amp; Engineering&#10;Database Management Systems | Information Technology&#10;Digital Signal Processing | Electronics"></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block mt-4">Save Academic Master Data</button>
+              </form>
+            </div>
           </div>
         </section>
 

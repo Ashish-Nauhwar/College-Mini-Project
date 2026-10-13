@@ -2,6 +2,16 @@ const express = require('express');
 const router = express.Router();
 const { createQrSvg, createQrDataUri } = require('../utils/qr-generator');
 
+function resolvePublicUrl(inputUrl, req) {
+  if (!inputUrl) return '';
+  if (inputUrl.startsWith('http://') || inputUrl.startsWith('https://')) {
+    return inputUrl;
+  }
+  const baseUrl = process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`;
+  const cleanPath = inputUrl.startsWith('/') ? inputUrl : `/${inputUrl}`;
+  return `${baseUrl.replace(/\/$/, '')}${cleanPath}`;
+}
+
 // GET /api/qr/image?url=...
 router.get('/image', (req, res) => {
   const { url, size } = req.query;
@@ -10,8 +20,9 @@ router.get('/image', (req, res) => {
   }
 
   try {
+    const targetUrl = resolvePublicUrl(url, req);
     const width = parseInt(size, 10) || 300;
-    const svg = createQrSvg(url, width);
+    const svg = createQrSvg(targetUrl, width);
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Content-Disposition', 'inline; filename="feedback-qr.svg"');
     res.send(svg);
@@ -29,9 +40,10 @@ router.get('/data-url', (req, res) => {
   }
 
   try {
+    const targetUrl = resolvePublicUrl(url, req);
     const width = parseInt(size, 10) || 300;
-    const dataUrl = createQrDataUri(url, width);
-    res.json({ dataUrl, url });
+    const dataUrl = createQrDataUri(targetUrl, width);
+    res.json({ dataUrl, url: targetUrl });
   } catch (err) {
     console.error('QR code generation error:', err);
     res.status(500).json({ error: 'Failed to generate QR code' });

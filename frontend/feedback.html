@@ -33,12 +33,22 @@
       <!-- Feedback Submission Form -->
       <form id="publicFeedbackForm" class="hidden" novalidate>
         <!-- Form Description -->
-        <p id="formDescription" class="text-muted" style="font-size: 0.95rem; margin-bottom: 8px;"></p>
+        <p id="formDescription" class="text-muted" style="font-size: 0.95rem; margin-bottom: 16px;"></p>
+
+        <!-- College Academic Context Fields (Rendered if configured) -->
+        <div id="collegeFieldsSection" class="hidden" style="margin-bottom: 20px; padding: 16px; background-color: var(--neutral-50); border-radius: var(--radius-lg); border: 1px solid var(--neutral-200); display: flex; flex-direction: column; gap: 14px;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--neutral-800); margin-bottom: 2px;">
+            🎓 Academic Information
+          </h3>
+          <div id="collegeFieldsGrid" style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+            <!-- Injected dynamically by feedback.js -->
+          </div>
+        </div>
 
         <!-- Primary Star Rating Field -->
         <div class="form-group" id="ratingQuestionGroup">
           <label class="form-label" id="primaryRatingLabel">
-            Overall Satisfaction <span class="required">*</span>
+            Overall Experience Rating <span class="required">*</span>
           </label>
           <div class="star-rating-selector" id="starSelector" role="radiogroup" aria-label="Overall Satisfaction Rating">
             <button type="button" class="star-rating-btn" data-value="1" aria-label="1 Star - Poor" title="1 Star">★</button>
@@ -50,7 +60,7 @@
           <p id="ratingHelperText" class="text-center text-muted" style="font-size: 0.85rem; font-weight: 500; min-height: 20px;">
             Tap a star to rate
           </p>
-          <div id="ratingError" class="form-error hidden">Please select a star rating</div>
+          <div id="ratingError" class="form-error hidden">Please select an overall rating</div>
         </div>
 
         <!-- Dynamic Questions Container -->
@@ -58,15 +68,15 @@
           <!-- Questions will be injected here dynamically -->
         </div>
 
-        <!-- Customer Contact Details (Optional) -->
+        <!-- Customer / Student Contact Details (Optional) -->
         <div style="border-top: 1px solid var(--neutral-200); padding-top: 16px; margin-top: 8px;">
           <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--neutral-800);">
-            Your Details (Optional)
+            Respondent Details (Optional / Anonymous)
           </h3>
 
           <div class="form-group">
             <label class="form-label" for="customerName">Your Name</label>
-            <input type="text" id="customerName" name="customerName" class="form-input" placeholder="e.g. Alex Hayes" autocomplete="name">
+            <input type="text" id="customerName" name="customerName" class="form-input" placeholder="e.g. Alex Hayes (or leave blank for Anonymous)" autocomplete="name">
           </div>
 
           <div class="form-group">
@@ -77,20 +87,20 @@
 
           <div class="form-group">
             <label class="form-label" for="customerPhone">Phone Number</label>
-            <input type="tel" id="customerPhone" name="customerPhone" class="form-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+            <input type="tel" id="customerPhone" name="customerPhone" class="form-input" placeholder="+91 98765 43210" autocomplete="tel">
           </div>
         </div>
 
         <!-- Submission Status Message -->
         <div id="submitError" class="form-error hidden" style="margin-bottom: 12px; text-align: center; justify-content: center;"></div>
 
-        <!-- Submit Button (Full Width, Large Touch Target) -->
+        <!-- Submit Button (Full Width, Large Touch Target >= 44px) -->
         <button type="submit" id="submitBtn" class="btn btn-primary btn-block" style="min-height: 52px; font-size: 1.05rem; font-weight: 600;">
           Submit Feedback
         </button>
 
         <p class="text-center text-muted" style="font-size: 0.75rem; margin-top: 12px;">
-          Powered by FeedbackHub • Secure &amp; Mobile Optimized
+          Powered by FeedbackHub • Multi-Tenant &amp; Mobile Optimized
         </p>
       </form>
 
@@ -99,19 +109,19 @@
         <div class="success-check-icon">✓</div>
         <h2 class="h2" id="successHeading">Thank You!</h2>
         <p class="text-muted" id="successMessage" style="font-size: 1rem; line-height: 1.6;">
-          Your feedback has been received and shared directly with management.
+          Your feedback has been received and shared directly with the administration.
         </p>
 
-        <!-- Google Review Call to Action (Shown for 4-5 stars) -->
-        <div id="googleReviewCta" class="hidden" style="width: 100%; max-width: 100%; box-sizing: border-box; background-color: var(--primary-light); padding: 18px; border-radius: var(--radius-lg); margin-top: 8px;">
-          <p style="font-weight: 600; color: var(--primary-text); margin-bottom: 8px; font-size: 0.95rem;">
-            Would you mind sharing your review on Google?
+        <!-- Google Review Call to Action (Shown to ALL respondents if configured) -->
+        <div id="googleReviewCta" class="hidden" style="width: 100%; max-width: 100%; box-sizing: border-box; background-color: var(--primary-light); padding: 18px; border-radius: var(--radius-lg); margin-top: 12px;">
+          <p style="font-weight: 600; color: var(--primary-text); margin-bottom: 6px; font-size: 0.95rem;">
+            Public Review Option
           </p>
           <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 12px;">
-            It takes just 30 seconds and helps other locals discover us!
+            If you wish, you can also share your review on Google to help others learn about our organization.
           </p>
           <a id="googleReviewBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block">
-            Share on Google Reviews ★★★★★
+            Optional: Share on Google Reviews ★★★★★
           </a>
         </div>
 

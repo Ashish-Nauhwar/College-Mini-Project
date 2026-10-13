@@ -171,6 +171,11 @@ const app = (function () {
   }
 
   async function switchDemo(role) {
+    if (role === 'superadmin') {
+      showToast('Super Admin access requires manual login with authorized credentials (admin@feedbackhub.com). 1-click elevation is disabled for security.', 'error');
+      window.location.hash = '#/login';
+      return;
+    }
     try {
       const data = await api('/api/auth/switch-demo', {
         method: 'POST',
@@ -182,15 +187,16 @@ const app = (function () {
       currentUser = data.user;
       currentBusiness = data.business;
 
-      showToast(`Switched to demo role: ${role}`, 'success');
+      const roleLabels = {
+        owner: 'Business Owner (Sarah)',
+        manager: 'Location Manager (Marcus)',
+        college: 'College Admin (Dr. Sharma)'
+      };
+      showToast(`Switched to: ${roleLabels[role] || role}`, 'success');
       updateUserUI();
       await fetchCommonData();
 
-      if (role === 'superadmin') {
-        window.location.hash = '#/admin';
-      } else {
-        window.location.hash = '#/dashboard';
-      }
+      window.location.hash = '#/dashboard';
       handleRoute();
     } catch (err) {
       showToast(err.message, 'error');
@@ -416,6 +422,33 @@ const app = (function () {
     filterDebounce = setTimeout(() => {
       loadInbox();
     }, 250);
+  }
+
+  async function exportCsv() {
+    try {
+      showToast('Preparing CSV export...', 'info');
+      const res = await fetch('/api/feedback/export/csv', {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Failed to export feedback CSV');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `feedbackhub-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showToast('CSV export downloaded successfully!', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   }
 
   function renderInboxFeedbacks(list) {
@@ -726,7 +759,81 @@ const app = (function () {
       document.getElementById('builderStatus').value = currentBuilderForm.status || 'published';
       document.getElementById('builderGoogleUrl').value = currentBuilderForm.googleReviewUrl || '';
 
+      const cfg = currentBuilderForm.collegeFieldsConfig || {};
+      const setCheckbox = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = Boolean(val);
+      };
+      setCheckbox('cfgDept', cfg.departmentEnabled);
+      setCheckbox('cfgCourse', cfg.courseEnabled);
+      setCheckbox('cfgAcadYear', cfg.academicYearEnabled);
+      setCheckbox('cfgYearOfStudy', cfg.yearOfStudyEnabled);
+      setCheckbox('cfgSemester', cfg.semesterEnabled);
+      setCheckbox('cfgSection', cfg.sectionEnabled);
+      setCheckbox('cfgFaculty', cfg.facultyEnabled);
+      setCheckbox('cfgSubject', cfg.subjectEnabled);
+      setCheckbox('cfgCategory', cfg.categoryEnabled);
+      setCheckbox('cfgAllowAnonymous', currentBuilderForm.allowAnonymous !== false);
+
       renderBuilderQuestions();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function applySelectedTemplate() {
+    const templateKey = document.getElementById('builderTemplateSelect')?.value;
+    if (!templateKey) {
+      showToast('Please select a template to apply', 'info');
+      return;
+    }
+
+    try {
+      showToast('Fetching starter template...', 'info');
+      const res = await api('/api/forms/templates');
+      const templates = res.templates || [];
+      const chosen = templates.find(t => t.type === templateKey);
+
+      if (!chosen) {
+        showToast('Template not found', 'error');
+        return;
+      }
+
+      if (!currentBuilderForm) {
+        currentBuilderForm = {
+          title: chosen.name,
+          description: chosen.description,
+          status: 'published',
+          questions: []
+        };
+      }
+
+      currentBuilderForm.title = chosen.name;
+      currentBuilderForm.description = chosen.description;
+      currentBuilderForm.collegeFieldsConfig = chosen.collegeFieldsConfig || {};
+      currentBuilderForm.questions = JSON.parse(JSON.stringify(chosen.questions || []));
+
+      document.getElementById('builderTitle').value = currentBuilderForm.title;
+      document.getElementById('builderDesc').value = currentBuilderForm.description;
+
+      const cfg = currentBuilderForm.collegeFieldsConfig;
+      const setCheckbox = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = Boolean(val);
+      };
+      setCheckbox('cfgDept', cfg.departmentEnabled);
+      setCheckbox('cfgCourse', cfg.courseEnabled);
+      setCheckbox('cfgAcadYear', cfg.academicYearEnabled);
+      setCheckbox('cfgYearOfStudy', cfg.yearOfStudyEnabled);
+      setCheckbox('cfgSemester', cfg.semesterEnabled);
+      setCheckbox('cfgSection', cfg.sectionEnabled);
+      setCheckbox('cfgFaculty', cfg.facultyEnabled);
+      setCheckbox('cfgSubject', cfg.subjectEnabled);
+      setCheckbox('cfgCategory', cfg.categoryEnabled);
+      setCheckbox('cfgAllowAnonymous', true);
+
+      renderBuilderQuestions();
+      showToast(`Applied "${chosen.name}" template successfully!`, 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -740,15 +847,16 @@ const app = (function () {
     container.innerHTML = questions.map((q, index) => {
       const isFirst = index === 0;
       const isLast = index === questions.length - 1;
+      const hasConditional = Boolean(q.conditional && q.conditional.dependsOn);
+      const otherQuestions = questions.filter((_, i) => i !== index);
 
       return `
         <div class="builder-question-card" id="q-card-${index}">
           <div class="builder-question-header">
             <span style="font-weight: 700; font-size: 0.95rem; color: var(--primary);">
-              Question ${index + 1}
+              Question ${index + 1} (${q.type})
             </span>
             <div class="builder-actions-group">
-              <!-- Accessible Touch Reorder Controls -->
               <button type="button" class="reorder-btn" title="Move Up" aria-label="Move question up" onclick="app.moveQuestion(${index}, -1)" ${isFirst ? 'disabled' : ''}>
                 ▲
               </button>
@@ -773,9 +881,16 @@ const app = (function () {
                 <select class="form-select" onchange="app.updateQuestionField(${index}, 'type', this.value)">
                   <option value="rating" ${q.type === 'rating' ? 'selected' : ''}>⭐ 5-Star Rating Control</option>
                   <option value="nps" ${q.type === 'nps' ? 'selected' : ''}>📈 Net Promoter Score (0-10 Scale)</option>
-                  <option value="choice" ${q.type === 'choice' ? 'selected' : ''}>🔘 Multiple Choice Chips</option>
+                  <option value="choice" ${q.type === 'choice' ? 'selected' : ''}>🔘 Multiple Choice (Radio)</option>
+                  <option value="select" ${q.type === 'select' ? 'selected' : ''}>📋 Dropdown Select</option>
+                  <option value="checkbox" ${q.type === 'checkbox' ? 'selected' : ''}>☑️ Multiple Choice (Checkboxes)</option>
                   <option value="yesno" ${q.type === 'yesno' ? 'selected' : ''}>👍 Yes / No Toggle</option>
-                  <option value="text" ${q.type === 'text' ? 'selected' : ''}>📝 Open Feedback Text Box</option>
+                  <option value="text" ${q.type === 'text' ? 'selected' : ''}>📝 Short Text Box</option>
+                  <option value="multiline" ${q.type === 'multiline' ? 'selected' : ''}>📄 Long Multiline Text</option>
+                  <option value="email" ${q.type === 'email' ? 'selected' : ''}>✉️ Email Address</option>
+                  <option value="phone" ${q.type === 'phone' ? 'selected' : ''}>📞 Phone Number</option>
+                  <option value="number" ${q.type === 'number' ? 'selected' : ''}>🔢 Numeric Value</option>
+                  <option value="date" ${q.type === 'date' ? 'selected' : ''}>📅 Date Picker</option>
                 </select>
               </div>
 
@@ -785,9 +900,9 @@ const app = (function () {
               </div>
             </div>
 
-            ${q.type === 'choice' ? `
+            ${['choice', 'select', 'checkbox'].includes(q.type) ? `
               <div style="background-color: var(--neutral-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
-                <label class="form-label" style="font-size: 0.85rem;">Choice Options:</label>
+                <label class="form-label" style="font-size: 0.85rem;">Option List:</label>
                 <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
                   ${(q.options || []).map((opt, optIndex) => `
                     <div style="display: flex; gap: 6px;">
@@ -799,6 +914,46 @@ const app = (function () {
                 <button type="button" class="btn btn-secondary btn-sm" onclick="app.addQuestionChoice(${index})">➕ Add Choice Option</button>
               </div>
             ` : ''}
+
+            <!-- Conditional Display Logic -->
+            <div style="background-color: var(--neutral-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; font-weight: 600;">
+                <input type="checkbox" id="cond_toggle_${index}" ${hasConditional ? 'checked' : ''} onchange="app.updateQuestionConditional(${index}, 'enabled', this.checked)">
+                Show this question conditionally based on another answer
+              </label>
+
+              ${hasConditional ? `
+                <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px;">
+                  <div class="form-group">
+                    <label class="form-label" style="font-size: 0.8rem;">Depends on Question:</label>
+                    <select class="form-select" onchange="app.updateQuestionConditional(${index}, 'dependsOn', this.value)">
+                      ${otherQuestions.map(oq => `
+                        <option value="${oq.id}" ${q.conditional && q.conditional.dependsOn === oq.id ? 'selected' : ''}>
+                          ${escapeHtml(oq.text.slice(0, 45))} (${oq.id})
+                        </option>
+                      `).join('')}
+                    </select>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div class="form-group">
+                      <label class="form-label" style="font-size: 0.8rem;">Operator:</label>
+                      <select class="form-select" onchange="app.updateQuestionConditional(${index}, 'operator', this.value)">
+                        <option value="equals" ${q.conditional && q.conditional.operator === 'equals' ? 'selected' : ''}>Equals (=)</option>
+                        <option value="not_equals" ${q.conditional && q.conditional.operator === 'not_equals' ? 'selected' : ''}>Not Equals (!=)</option>
+                        <option value="greater_than" ${q.conditional && q.conditional.operator === 'greater_than' ? 'selected' : ''}>Greater Than (&gt;)</option>
+                        <option value="less_than" ${q.conditional && q.conditional.operator === 'less_than' ? 'selected' : ''}>Less Than (&lt;)</option>
+                      </select>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" style="font-size: 0.8rem;">Target Answer Value:</label>
+                      <input type="text" class="form-input" value="${escapeHtml(q.conditional ? q.conditional.value : '')}" placeholder="e.g. Yes or 1 or Option A" oninput="app.updateQuestionConditional(${index}, 'value', this.value)">
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
           </div>
         </div>
       `;
@@ -822,10 +977,36 @@ const app = (function () {
   function updateQuestionField(index, field, value) {
     if (!currentBuilderForm || !currentBuilderForm.questions[index]) return;
     currentBuilderForm.questions[index][field] = value;
-    if (field === 'type' && value === 'choice' && !currentBuilderForm.questions[index].options) {
+    if (['choice', 'select', 'checkbox'].includes(value) && !currentBuilderForm.questions[index].options) {
       currentBuilderForm.questions[index].options = ['Option A', 'Option B'];
       renderBuilderQuestions();
     }
+  }
+
+  function updateQuestionConditional(index, field, value) {
+    if (!currentBuilderForm || !currentBuilderForm.questions[index]) return;
+    if (field === 'enabled') {
+      if (!value) {
+        delete currentBuilderForm.questions[index].conditional;
+      } else {
+        const otherQuestions = currentBuilderForm.questions.filter((_, i) => i !== index);
+        currentBuilderForm.questions[index].conditional = {
+          dependsOn: otherQuestions.length > 0 ? otherQuestions[0].id : '',
+          operator: 'equals',
+          value: ''
+        };
+      }
+      renderBuilderQuestions();
+      return;
+    }
+    if (!currentBuilderForm.questions[index].conditional) {
+      currentBuilderForm.questions[index].conditional = {
+        dependsOn: '',
+        operator: 'equals',
+        value: ''
+      };
+    }
+    currentBuilderForm.questions[index].conditional[field] = value;
   }
 
   function addQuestionChoice(qIndex) {
@@ -862,16 +1043,14 @@ const app = (function () {
 
     currentBuilderForm.questions.push({
       id: 'q_' + Date.now(),
-      type: 'text',
-      text: 'How can we improve your experience?',
-      required: false,
-      multiline: true
+      type: 'rating',
+      text: 'How would you rate this experience overall?',
+      required: true
     });
 
     renderBuilderQuestions();
     showToast('Added new question card');
 
-    // Scroll to bottom
     setTimeout(() => {
       const cards = document.querySelectorAll('.builder-question-card');
       if (cards.length > 0) {
@@ -883,12 +1062,35 @@ const app = (function () {
   async function saveCurrentForm() {
     if (!currentBuilderForm) return;
 
+    const collegeFieldsConfig = {
+      departmentEnabled: document.getElementById('cfgDept')?.checked || false,
+      departmentRequired: document.getElementById('cfgDept')?.checked || false,
+      courseEnabled: document.getElementById('cfgCourse')?.checked || false,
+      courseRequired: document.getElementById('cfgCourse')?.checked || false,
+      academicYearEnabled: document.getElementById('cfgAcadYear')?.checked || false,
+      academicYearRequired: false,
+      yearOfStudyEnabled: document.getElementById('cfgYearOfStudy')?.checked || false,
+      yearOfStudyRequired: false,
+      semesterEnabled: document.getElementById('cfgSemester')?.checked || false,
+      semesterRequired: false,
+      sectionEnabled: document.getElementById('cfgSection')?.checked || false,
+      sectionRequired: false,
+      facultyEnabled: document.getElementById('cfgFaculty')?.checked || false,
+      facultyRequired: document.getElementById('cfgFaculty')?.checked || false,
+      subjectEnabled: document.getElementById('cfgSubject')?.checked || false,
+      subjectRequired: document.getElementById('cfgSubject')?.checked || false,
+      categoryEnabled: document.getElementById('cfgCategory')?.checked || false,
+      categoryRequired: false
+    };
+
     const payload = {
       title: document.getElementById('builderTitle').value.trim(),
       description: document.getElementById('builderDesc').value.trim(),
       locationId: document.getElementById('builderLocation').value || null,
       status: document.getElementById('builderStatus').value,
       googleReviewUrl: document.getElementById('builderGoogleUrl').value.trim(),
+      collegeFieldsConfig,
+      allowAnonymous: document.getElementById('cfgAllowAnonymous')?.checked !== false,
       questions: currentBuilderForm.questions
     };
 
@@ -910,30 +1112,147 @@ const app = (function () {
     }
   }
 
+  function renderInteractiveControlPreview(q) {
+    switch (q.type) {
+      case 'rating':
+        return `
+          <div style="display: flex; gap: 8px; font-size: 1.8rem; color: #f59e0b; cursor: pointer; user-select: none;">
+            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--neutral-500); margin-top: 4px;">Tap star to rate (1 - 5)</div>
+        `;
+      case 'nps':
+        return `
+          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            ${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `
+              <button type="button" class="btn btn-secondary btn-sm" style="min-width: 32px; padding: 6px 6px; font-size: 0.82rem; font-weight: 600;">${n}</button>
+            `).join('')}
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--neutral-400); margin-top: 4px;">
+            <span>0 = Not likely</span><span>10 = Extremely likely</span>
+          </div>
+        `;
+      case 'choice':
+        return `
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            ${(q.options && q.options.length ? q.options : ['Option 1', 'Option 2']).map((opt, oi) => `
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; padding: 8px 12px; background: #ffffff; border: 1px solid var(--neutral-200); border-radius: var(--radius-md); cursor: pointer;">
+                <input type="radio" name="prev_radio_${q.id}" ${oi === 0 ? 'checked' : ''}>
+                <span>${escapeHtml(opt)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      case 'select':
+        return `
+          <select class="form-select">
+            <option value="">-- Choose an option --</option>
+            ${(q.options && q.options.length ? q.options : ['Option 1', 'Option 2']).map(opt => `
+              <option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>
+            `).join('')}
+          </select>
+        `;
+      case 'checkbox':
+        return `
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            ${(q.options && q.options.length ? q.options : ['Option 1', 'Option 2']).map(opt => `
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; padding: 8px 12px; background: #ffffff; border: 1px solid var(--neutral-200); border-radius: var(--radius-md); cursor: pointer;">
+                <input type="checkbox">
+                <span>${escapeHtml(opt)}</span>
+              </label>
+            `).join('')}
+          </div>
+        `;
+      case 'yesno':
+        return `
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-secondary" style="flex: 1; padding: 10px;">👍 Yes</button>
+            <button type="button" class="btn btn-secondary" style="flex: 1; padding: 10px;">👎 No</button>
+          </div>
+        `;
+      case 'multiline':
+        return `<textarea class="form-textarea" rows="3" placeholder="${escapeHtml(q.placeholder || 'Type detailed comments here...')}"></textarea>`;
+      case 'email':
+        return `<input type="email" class="form-input" placeholder="student@example.edu">`;
+      case 'phone':
+        return `<input type="tel" class="form-input" placeholder="+91 98765 43210">`;
+      case 'number':
+        return `<input type="number" class="form-input" placeholder="Enter number...">`;
+      case 'date':
+        return `<input type="date" class="form-input">`;
+      case 'text':
+      default:
+        return `<input type="text" class="form-input" placeholder="${escapeHtml(q.placeholder || 'Your response...')}">`;
+    }
+  }
+
   function previewCurrentForm() {
     if (!currentBuilderForm) return;
     const modal = document.getElementById('previewModal');
     const body = document.getElementById('previewModalBody');
 
+    const cfConfig = currentBuilderForm.collegeFieldsConfig || {};
+    const hasAcademicFields = Object.values(cfConfig).some(Boolean);
+
     body.innerHTML = `
-      <div style="background:#ffffff; border-radius: var(--radius-lg); padding: 18px; border: 1px solid var(--neutral-200);">
-        <div style="text-align: center; margin-bottom: 16px;">
-          <div style="font-size: 2rem;">☕</div>
-          <h3 style="font-size: 1.15rem; font-weight: 700;">${escapeHtml(currentBuilderForm.title)}</h3>
+      <div style="background:#ffffff; border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--neutral-200);">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="font-size: 2.2rem; margin-bottom: 6px;">⚡</div>
+          <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 4px;">${escapeHtml(currentBuilderForm.title)}</h3>
           <p class="text-muted text-sm">${escapeHtml(currentBuilderForm.description || '')}</p>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 14px;">
+        ${hasAcademicFields ? `
+          <div style="background-color: var(--primary-light); padding: 14px; border-radius: var(--radius-md); margin-bottom: 18px; border: 1px solid #c7d2fe;">
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary-text); margin-bottom: 10px;">🎓 Academic Details (Preview)</div>
+            <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+              ${cfConfig.departmentEnabled ? `
+                <select class="form-select" style="min-height: 36px; font-size: 0.85rem;">
+                  <option>-- Select Department --</option>
+                  <option>Computer Science & Engineering</option>
+                  <option>Information Technology</option>
+                </select>
+              ` : ''}
+              ${cfConfig.courseEnabled ? `
+                <select class="form-select" style="min-height: 36px; font-size: 0.85rem;">
+                  <option>-- Select Course / Program --</option>
+                  <option>B.Tech Computer Science</option>
+                </select>
+              ` : ''}
+              ${cfConfig.facultyEnabled ? `
+                <select class="form-select" style="min-height: 36px; font-size: 0.85rem;">
+                  <option>-- Select Faculty Member --</option>
+                  <option>Dr. Rajesh Sharma</option>
+                </select>
+              ` : ''}
+              ${cfConfig.subjectEnabled ? `
+                <select class="form-select" style="min-height: 36px; font-size: 0.85rem;">
+                  <option>-- Select Subject --</option>
+                  <option>Data Structures & Algorithms</option>
+                </select>
+              ` : ''}
+            </div>
+          </div>
+        ` : ''}
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
           ${(currentBuilderForm.questions || []).map((q, i) => `
-            <div style="border-bottom: 1px solid var(--neutral-100); padding-bottom: 10px;">
-              <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 6px;">
+            <div style="border-bottom: 1px solid var(--neutral-100); padding-bottom: 14px;">
+              <div style="font-weight: 600; font-size: 0.92rem; margin-bottom: 8px; color: var(--neutral-800);">
                 ${i + 1}. ${escapeHtml(q.text)} ${q.required ? '<span style="color:red">*</span>' : ''}
+                ${q.conditional && q.conditional.dependsOn ? `<span style="font-size: 0.72rem; color: var(--primary); margin-left: 6px;">(Conditional: when ${escapeHtml(q.conditional.dependsOn)} ${escapeHtml(q.conditional.operator)} "${escapeHtml(q.conditional.value)}")</span>` : ''}
               </div>
-              <div style="color: var(--neutral-400); font-size: 0.82rem; font-style: italic;">
-                [Preview: ${q.type.toUpperCase()} Control]
+              <div>
+                ${renderInteractiveControlPreview(q)}
               </div>
             </div>
           `).join('')}
+        </div>
+
+        <div style="margin-top: 20px;">
+          <button type="button" class="btn btn-primary btn-block" style="min-height: 44px; font-weight: 600;">
+            Submit Feedback
+          </button>
         </div>
       </div>
     `;
@@ -1167,7 +1486,21 @@ const app = (function () {
     }
   }
 
-  // --- Settings ---
+  // --- Settings & Profile ---
+  function toggleSettingsAddress(isOnline) {
+    const block = document.getElementById('setAddressBlock');
+    if (block) {
+      block.style.display = isOnline ? 'none' : 'flex';
+    }
+  }
+
+  function toggleRegisterAddress(isOnline) {
+    const block = document.getElementById('regAddressBlock');
+    if (block) {
+      block.style.display = isOnline ? 'none' : 'flex';
+    }
+  }
+
   async function loadSettingsView() {
     if (!currentBusiness) {
       try {
@@ -1178,17 +1511,40 @@ const app = (function () {
       }
     }
     if (!currentBusiness) return;
-    const nameInput = document.getElementById('setBizName');
-    const catInput = document.getElementById('setCategory');
-    const emailInput = document.getElementById('setEmail');
-    const phoneInput = document.getElementById('setPhone');
-    const addrInput = document.getElementById('setAddress');
 
-    if (nameInput) nameInput.value = currentBusiness.name || '';
-    if (catInput) catInput.value = currentBusiness.category || '';
-    if (emailInput) emailInput.value = currentBusiness.email || '';
-    if (phoneInput) phoneInput.value = currentBusiness.phone || '';
-    if (addrInput) addrInput.value = currentBusiness.address || '';
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val || '';
+    };
+
+    setVal('setBizName', currentBusiness.name || '');
+    setVal('setCategory', currentBusiness.category || '');
+    setVal('setEmail', currentBusiness.email || '');
+    setVal('setPhone', currentBusiness.phone || '');
+
+    const onlineCheck = document.getElementById('setIsOnlineOnly');
+    if (onlineCheck) {
+      onlineCheck.checked = Boolean(currentBusiness.isOnlineOnly);
+      toggleSettingsAddress(onlineCheck.checked);
+    }
+
+    const addr = currentBusiness.address || {};
+    setVal('setAddressLine1', addr.addressLine1 || (typeof currentBusiness.address === 'string' ? currentBusiness.address : ''));
+    setVal('setAddressLine2', addr.addressLine2);
+    setVal('setCity', addr.city);
+    setVal('setState', addr.state);
+    setVal('setPostalCode', addr.postalCode);
+    setVal('setCountry', addr.country || 'India');
+
+    // Populate academic master data
+    const acad = currentBusiness.academicConfig || {};
+    setVal('acadDepts', (acad.departments || []).join(', '));
+    setVal('acadCourses', (acad.courses || []).join(', '));
+    setVal('acadYears', (acad.academicYears || []).join(', '));
+    setVal('acadSemesters', (acad.semesters || []).join(', '));
+    setVal('acadSections', (acad.sections || []).join(', '));
+    setVal('acadFaculty', (acad.faculty || []).map(f => `${f.name} | ${f.department}`).join('\n'));
+    setVal('acadSubjects', (acad.subjects || []).map(s => `${s.name} | ${s.department}`).join('\n'));
   }
 
   async function saveSettings(e) {
@@ -1197,7 +1553,16 @@ const app = (function () {
     const category = document.getElementById('setCategory')?.value.trim();
     const email = document.getElementById('setEmail')?.value.trim();
     const phone = document.getElementById('setPhone')?.value.trim();
-    const address = document.getElementById('setAddress')?.value.trim();
+    const isOnlineOnly = Boolean(document.getElementById('setIsOnlineOnly')?.checked);
+
+    const address = {
+      addressLine1: document.getElementById('setAddressLine1')?.value.trim(),
+      addressLine2: document.getElementById('setAddressLine2')?.value.trim(),
+      city: document.getElementById('setCity')?.value.trim(),
+      state: document.getElementById('setState')?.value.trim(),
+      postalCode: document.getElementById('setPostalCode')?.value.trim(),
+      country: document.getElementById('setCountry')?.value.trim() || 'India'
+    };
 
     if (!name) {
       showToast('Business name is required', 'error');
@@ -1207,11 +1572,52 @@ const app = (function () {
     try {
       const res = await api('/api/auth/business-settings', {
         method: 'PUT',
-        body: JSON.stringify({ name, category, email, phone, address })
+        body: JSON.stringify({ name, category, email, phone, isOnlineOnly, address })
       });
       currentBusiness = res.business;
       updateUserUI();
       showToast('Business settings saved successfully!', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function saveAcademicConfig(e) {
+    e.preventDefault();
+    const splitCsv = (id) => (document.getElementById(id)?.value || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const parseLines = (id) => (document.getElementById(id)?.value || '')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const parts = line.split('|').map(p => p.trim());
+        return { name: parts[0] || '', department: parts[1] || '' };
+      });
+
+    const academicConfig = {
+      departments: splitCsv('acadDepts'),
+      courses: splitCsv('acadCourses'),
+      academicYears: splitCsv('acadYears'),
+      semesters: splitCsv('acadSemesters'),
+      sections: splitCsv('acadSections'),
+      faculty: parseLines('acadFaculty'),
+      subjects: parseLines('acadSubjects')
+    };
+
+    try {
+      const res = await api('/api/auth/business-settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: currentBusiness ? currentBusiness.name : 'College',
+          academicConfig
+        })
+      });
+      currentBusiness = res.business;
+      showToast('Academic master data saved successfully!', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1341,17 +1747,40 @@ const app = (function () {
     if (registerForm) {
       registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const businessName = document.getElementById('regBizName').value.trim();
-        const category = document.getElementById('regCategory').value;
-        const ownerName = document.getElementById('regOwnerName').value.trim();
-        const email = document.getElementById('regEmail').value.trim();
-        const password = document.getElementById('regPassword').value;
+        const businessName = document.getElementById('regBizName')?.value.trim();
+        const businessType = document.getElementById('regBizType')?.value || 'other';
+        const category = document.getElementById('regCategory')?.value.trim();
+        const ownerName = document.getElementById('regOwnerName')?.value.trim();
+        const email = document.getElementById('regEmail')?.value.trim();
+        const password = document.getElementById('regPassword')?.value;
+        const phone = document.getElementById('regPhone')?.value.trim();
+        const isOnlineOnly = Boolean(document.getElementById('regIsOnlineOnly')?.checked);
+
+        const address = {
+          addressLine1: document.getElementById('regAddressLine1')?.value.trim(),
+          addressLine2: document.getElementById('regAddressLine2')?.value.trim(),
+          city: document.getElementById('regCity')?.value.trim(),
+          state: document.getElementById('regState')?.value.trim(),
+          postalCode: document.getElementById('regPostalCode')?.value.trim(),
+          country: document.getElementById('regCountry')?.value.trim() || 'India'
+        };
+
         const errEl = document.getElementById('regError');
 
         try {
           const data = await api('/api/auth/register', {
             method: 'POST',
-            body: JSON.stringify({ businessName, category, ownerName, email, password })
+            body: JSON.stringify({
+              businessName,
+              businessType,
+              category,
+              ownerName,
+              email,
+              password,
+              phone,
+              isOnlineOnly,
+              address
+            })
           });
           token = data.token;
           localStorage.setItem('fh_token', token);
@@ -1384,6 +1813,7 @@ const app = (function () {
     closeMobileDrawer,
     refreshDashboard,
     filterInbox,
+    exportCsv,
     openFeedbackModal,
     closeFeedbackModal,
     updateFeedbackStatus,
@@ -1391,9 +1821,11 @@ const app = (function () {
     addInternalNote,
     resolveComplaint,
     loadBuilderForm,
+    applySelectedTemplate,
     addBuilderQuestion,
     moveQuestion,
     updateQuestionField,
+    updateQuestionConditional,
     addQuestionChoice,
     removeQuestionChoice,
     updateQuestionChoice,
@@ -1410,6 +1842,9 @@ const app = (function () {
     closeAddLocationModal,
     saveNewLocation,
     saveSettings,
+    saveAcademicConfig,
+    toggleSettingsAddress,
+    toggleRegisterAddress,
     toggleBusinessStatus
   };
 })();
