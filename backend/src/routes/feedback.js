@@ -26,6 +26,11 @@ function isQuestionVisible(q, answers) {
       return Number(parentValue) > Number(target);
     case 'less_than':
       return Number(parentValue) < Number(target);
+    case 'contains':
+      if (Array.isArray(parentValue)) {
+        return parentValue.some(item => String(item).toLowerCase().includes(String(target).toLowerCase()));
+      }
+      return String(parentValue).toLowerCase().includes(String(target).toLowerCase());
     default:
       return true;
   }
@@ -165,6 +170,16 @@ async function handleSubmit(req, res) {
             sanitizedAnswers[q.id] = phoneStr;
             break;
           }
+          case 'date': {
+            const dateStr = String(answerVal).trim();
+            if (!dateStr || isNaN(Date.parse(dateStr))) {
+              return res.status(400).json({
+                error: `Field "${q.text}" must be a valid calendar date`
+              });
+            }
+            sanitizedAnswers[q.id] = dateStr;
+            break;
+          }
           case 'number': {
             const num = Number(answerVal);
             if (isNaN(num)) {
@@ -201,12 +216,30 @@ async function handleSubmit(req, res) {
       }
     }
 
-    // Validate college fields if enabled on form
+    // Retrieve business for configuration verification
+    const business = await db.getBusinessById(form.businessId);
+    const acConfig = business?.academicConfig || {};
     const cfConfig = form.collegeFieldsConfig || {};
     const sanitizedAcademic = {};
 
+    // Validate Required College Fields according to form config
     if (cfConfig.departmentRequired && (!academicDetails || !academicDetails.department)) {
       return res.status(400).json({ error: 'Department is required for this academic feedback form' });
+    }
+    if (cfConfig.courseRequired && (!academicDetails || !academicDetails.course)) {
+      return res.status(400).json({ error: 'Course is required for this academic feedback form' });
+    }
+    if (cfConfig.academicYearRequired && (!academicDetails || !academicDetails.academicYear)) {
+      return res.status(400).json({ error: 'Academic Year is required for this academic feedback form' });
+    }
+    if (cfConfig.yearOfStudyRequired && (!academicDetails || !academicDetails.yearOfStudy)) {
+      return res.status(400).json({ error: 'Year of study is required for this academic feedback form' });
+    }
+    if (cfConfig.semesterRequired && (!academicDetails || !academicDetails.semester)) {
+      return res.status(400).json({ error: 'Semester is required for this academic feedback form' });
+    }
+    if (cfConfig.sectionRequired && (!academicDetails || !academicDetails.section)) {
+      return res.status(400).json({ error: 'Section is required for this academic feedback form' });
     }
     if (cfConfig.facultyRequired && (!academicDetails || !academicDetails.faculty)) {
       return res.status(400).json({ error: 'Faculty member is required for this academic feedback form' });
@@ -214,25 +247,110 @@ async function handleSubmit(req, res) {
     if (cfConfig.subjectRequired && (!academicDetails || !academicDetails.subject)) {
       return res.status(400).json({ error: 'Subject is required for this academic feedback form' });
     }
-
-    if (academicDetails && typeof academicDetails === 'object') {
-      sanitizedAcademic.department = academicDetails.department ? String(academicDetails.department).trim() : '';
-      sanitizedAcademic.course = academicDetails.course ? String(academicDetails.course).trim() : '';
-      sanitizedAcademic.academicYear = academicDetails.academicYear ? String(academicDetails.academicYear).trim() : '';
-      sanitizedAcademic.yearOfStudy = academicDetails.yearOfStudy ? String(academicDetails.yearOfStudy).trim() : '';
-      sanitizedAcademic.semester = academicDetails.semester ? String(academicDetails.semester).trim() : '';
-      sanitizedAcademic.section = academicDetails.section ? String(academicDetails.section).trim() : '';
-      sanitizedAcademic.faculty = academicDetails.faculty ? String(academicDetails.faculty).trim() : '';
-      sanitizedAcademic.subject = academicDetails.subject ? String(academicDetails.subject).trim() : '';
-      sanitizedAcademic.category = academicDetails.category ? String(academicDetails.category).trim() : '';
+    if (cfConfig.categoryRequired && (!academicDetails || !academicDetails.category)) {
+      return res.status(400).json({ error: 'Feedback category is required for this academic feedback form' });
     }
 
-    // Determine overall rating
-    let overallRating = 5;
+    if (academicDetails && typeof academicDetails === 'object') {
+      const dept = academicDetails.department ? String(academicDetails.department).trim() : '';
+      const course = academicDetails.course ? String(academicDetails.course).trim() : '';
+      const acadYear = academicDetails.academicYear ? String(academicDetails.academicYear).trim() : '';
+      const yos = academicDetails.yearOfStudy ? String(academicDetails.yearOfStudy).trim() : '';
+      const sem = academicDetails.semester ? String(academicDetails.semester).trim() : '';
+      const sec = academicDetails.section ? String(academicDetails.section).trim() : '';
+      const fac = academicDetails.faculty ? String(academicDetails.faculty).trim() : '';
+      const subj = academicDetails.subject ? String(academicDetails.subject).trim() : '';
+      const cat = academicDetails.category ? String(academicDetails.category).trim() : '';
+
+      // Validate against allowed business lists (prevent forged values)
+      if (dept && Array.isArray(acConfig.departments) && acConfig.departments.length > 0) {
+        if (!acConfig.departments.includes(dept)) {
+          return res.status(400).json({ error: `Invalid department "${dept}". Must match institution configuration.` });
+        }
+      }
+      if (course && Array.isArray(acConfig.courses) && acConfig.courses.length > 0) {
+        if (!acConfig.courses.includes(course)) {
+          return res.status(400).json({ error: `Invalid course "${course}". Must match institution configuration.` });
+        }
+      }
+      if (acadYear && Array.isArray(acConfig.academicYears) && acConfig.academicYears.length > 0) {
+        if (!acConfig.academicYears.includes(acadYear)) {
+          return res.status(400).json({ error: `Invalid academic year "${acadYear}". Must match institution configuration.` });
+        }
+      }
+      if (yos && Array.isArray(acConfig.years) && acConfig.years.length > 0) {
+        if (!acConfig.years.includes(yos)) {
+          return res.status(400).json({ error: `Invalid year of study "${yos}". Must match institution configuration.` });
+        }
+      }
+      if (sem && Array.isArray(acConfig.semesters) && acConfig.semesters.length > 0) {
+        if (!acConfig.semesters.includes(sem)) {
+          return res.status(400).json({ error: `Invalid semester "${sem}". Must match institution configuration.` });
+        }
+      }
+      if (sec && Array.isArray(acConfig.sections) && acConfig.sections.length > 0) {
+        if (!acConfig.sections.includes(sec)) {
+          return res.status(400).json({ error: `Invalid section "${sec}". Must match institution configuration.` });
+        }
+      }
+      if (cat && Array.isArray(acConfig.feedbackCategories) && acConfig.feedbackCategories.length > 0) {
+        if (!acConfig.feedbackCategories.includes(cat)) {
+          return res.status(400).json({ error: `Invalid feedback category "${cat}". Must match institution configuration.` });
+        }
+      }
+
+      // Validate faculty and departmental mapping
+      if (fac) {
+        if (Array.isArray(acConfig.faculty) && acConfig.faculty.length > 0) {
+          const matchedFaculty = acConfig.faculty.find(f => f.name.toLowerCase() === fac.toLowerCase());
+          if (!matchedFaculty) {
+            return res.status(400).json({ error: `Invalid faculty member "${fac}". Not registered with this institution.` });
+          }
+          if (dept && matchedFaculty.department && matchedFaculty.department.toLowerCase() !== dept.toLowerCase()) {
+            return res.status(400).json({
+              error: `Faculty member "${fac}" belongs to department "${matchedFaculty.department}", not "${dept}"`
+            });
+          }
+        }
+      }
+
+      // Validate subject and departmental mapping
+      if (subj) {
+        if (Array.isArray(acConfig.subjects) && acConfig.subjects.length > 0) {
+          const matchedSubject = acConfig.subjects.find(
+            s => s.name.toLowerCase() === subj.toLowerCase() || (s.code && s.code.toLowerCase() === subj.toLowerCase())
+          );
+          if (!matchedSubject) {
+            return res.status(400).json({ error: `Invalid subject "${subj}". Not registered with this institution.` });
+          }
+          if (dept && matchedSubject.department && matchedSubject.department.toLowerCase() !== dept.toLowerCase()) {
+            return res.status(400).json({
+              error: `Subject "${subj}" belongs to department "${matchedSubject.department}", not "${dept}"`
+            });
+          }
+        }
+      }
+
+      if (dept) sanitizedAcademic.department = dept;
+      if (course) sanitizedAcademic.course = course;
+      if (acadYear) sanitizedAcademic.academicYear = acadYear;
+      if (yos) sanitizedAcademic.yearOfStudy = yos;
+      if (sem) sanitizedAcademic.semester = sem;
+      if (sec) sanitizedAcademic.section = sec;
+      if (fac) sanitizedAcademic.faculty = fac;
+      if (subj) sanitizedAcademic.subject = subj;
+      if (cat) sanitizedAcademic.category = cat;
+    }
+
+    // Extract Star Rating (1 to 5 scale) - Do NOT fabricate 5 stars if not present!
+    let overallRating = null;
     if (rating !== undefined && rating !== null && rating !== '') {
-      overallRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+      const parsedRating = parseInt(rating, 10);
+      if (!isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5) {
+        overallRating = parsedRating;
+      }
     } else {
-      // Find rating question if present
+      // Find rating question if answered
       for (const [key, val] of Object.entries(sanitizedAnswers)) {
         const matchingQ = form.questions.find(q => q.id === key);
         if (matchingQ && matchingQ.type === 'rating' && typeof val === 'number') {
@@ -242,19 +360,54 @@ async function handleSubmit(req, res) {
       }
     }
 
-    // Automatic sentiment & priority routing
+    // Extract NPS responses (0 to 10 scale)
+    const npsAnswersMap = new Map();
+    let primaryNps = null;
+    if (nps !== undefined && nps !== null && nps !== '') {
+      const parsedNps = parseInt(nps, 10);
+      if (!isNaN(parsedNps) && parsedNps >= 0 && parsedNps <= 10) {
+        primaryNps = parsedNps;
+      }
+    }
+    for (const [key, val] of Object.entries(sanitizedAnswers)) {
+      const matchingQ = form.questions.find(q => q.id === key);
+      if (matchingQ && matchingQ.type === 'nps' && typeof val === 'number') {
+        npsAnswersMap.set(key, val);
+        if (primaryNps === null) {
+          primaryNps = val;
+        }
+      }
+    }
+
+    // Explicit sentiment & priority routing
     let sentiment = 'neutral';
     let priority = 'low';
 
-    if (overallRating >= 4) {
-      sentiment = 'positive';
-      priority = 'low';
-    } else if (overallRating === 3) {
-      sentiment = 'neutral';
-      priority = 'medium';
+    if (overallRating !== null) {
+      if (overallRating >= 4) {
+        sentiment = 'positive';
+        priority = 'low';
+      } else if (overallRating === 3) {
+        sentiment = 'neutral';
+        priority = 'medium';
+      } else {
+        sentiment = 'negative';
+        priority = overallRating === 1 ? 'critical' : 'urgent';
+      }
+    } else if (primaryNps !== null) {
+      if (primaryNps >= 9) {
+        sentiment = 'positive';
+        priority = 'low';
+      } else if (primaryNps >= 7) {
+        sentiment = 'neutral';
+        priority = 'low';
+      } else {
+        sentiment = 'negative';
+        priority = primaryNps <= 3 ? 'critical' : 'urgent';
+      }
     } else {
-      sentiment = 'negative';
-      priority = overallRating === 1 ? 'critical' : 'urgent';
+      sentiment = 'neutral';
+      priority = 'low';
     }
 
     // Save feedback to database
@@ -263,6 +416,8 @@ async function handleSubmit(req, res) {
       locationId: form.locationId || null,
       formId: form._id,
       rating: overallRating,
+      nps: primaryNps,
+      npsAnswers: npsAnswersMap,
       sentiment,
       status: 'new',
       priority,
@@ -274,8 +429,6 @@ async function handleSubmit(req, res) {
       comments: comments ? comments.trim() : '',
       source: source || 'QR Code'
     });
-
-    const business = await db.getBusinessById(form.businessId);
 
     // NON-GATED GOOGLE REVIEW PROMPT: Show to ALL respondents if configured!
     const effectiveGoogleUrl = form.googleReviewUrl || business?.googleReviewUrl || '';
@@ -341,6 +494,9 @@ router.get('/', requireAuth, async (req, res) => {
         return {
           ...obj,
           id: f._id ? f._id.toString() : f.id,
+          rating: obj.rating,
+          nps: obj.nps,
+          npsAnswers: obj.npsAnswers instanceof Map ? Object.fromEntries(obj.npsAnswers) : (obj.npsAnswers || {}),
           answers: obj.answers instanceof Map ? Object.fromEntries(obj.answers) : (obj.answers || {})
         };
       })
@@ -377,6 +533,7 @@ router.get('/export/csv', requireAuth, async (req, res) => {
       'ID',
       'Date',
       'Rating',
+      'NPS',
       'Sentiment',
       'Status',
       'Priority',
@@ -394,7 +551,8 @@ router.get('/export/csv', requireAuth, async (req, res) => {
       return [
         escapeCsv(f._id ? f._id.toString() : f.id),
         escapeCsv(f.createdAt ? new Date(f.createdAt).toISOString() : ''),
-        escapeCsv(f.rating),
+        escapeCsv(f.rating !== null && f.rating !== undefined ? f.rating : 'N/A'),
+        escapeCsv(f.nps !== null && f.nps !== undefined ? f.nps : 'N/A'),
         escapeCsv(f.sentiment),
         escapeCsv(f.status),
         escapeCsv(f.priority),

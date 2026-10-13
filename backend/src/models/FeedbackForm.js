@@ -5,7 +5,7 @@ const conditionalSchema = new mongoose.Schema(
     dependsOn: { type: String, trim: true },
     operator: {
       type: String,
-      enum: ['equals', 'not_equals', 'in', 'greater_than', 'less_than'],
+      enum: ['equals', 'not_equals', 'in', 'greater_than', 'less_than', 'contains'],
       default: 'equals'
     },
     value: { type: mongoose.Schema.Types.Mixed }
@@ -113,7 +113,7 @@ const feedbackFormSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ['draft', 'published', 'paused', 'archived'],
-      default: 'published',
+      default: 'draft',
       index: true
     },
     allowAnonymous: {

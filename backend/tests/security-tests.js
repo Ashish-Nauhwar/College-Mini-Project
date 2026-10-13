@@ -190,6 +190,21 @@ async function runSecurityTests() {
     assert.strictEqual(isQuestionVisible(questionLt, { q_nps: 7 }), false);
   });
 
+  await it('Conditional logic: contains operator evaluates correctly for strings and arrays', () => {
+    const questionStr = {
+      id: 'q_lab_feedback',
+      conditional: { dependsOn: 'q_feedback_text', operator: 'contains', value: 'lab' }
+    };
+    const questionArr = {
+      id: 'q_equip_details',
+      conditional: { dependsOn: 'q_facilities', operator: 'contains', value: 'computer' }
+    };
+    assert.strictEqual(isQuestionVisible(questionStr, { q_feedback_text: 'The Physics lab was great' }), true);
+    assert.strictEqual(isQuestionVisible(questionStr, { q_feedback_text: 'Canteen food was okay' }), false);
+    assert.strictEqual(isQuestionVisible(questionArr, { q_facilities: ['library', 'computer center'] }), true);
+    assert.strictEqual(isQuestionVisible(questionArr, { q_facilities: ['library', 'sports complex'] }), false);
+  });
+
   // SECTION 6: Non-Gated Google Review Policy
   console.log('\n--- 6. Google Review Transparency (Anti-Review Gating) ---');
   await it('Google review link is presented unconditionally across all rating scores (1★ to 5★)', () => {

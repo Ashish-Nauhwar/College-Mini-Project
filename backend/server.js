@@ -47,10 +47,24 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2. CORS configuration
-const allowedOrigin = process.env.PUBLIC_APP_URL || '*';
+// 2. CORS configuration with explicit origin allowlist
+const corsOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : (process.env.PUBLIC_APP_URL ? [process.env.PUBLIC_APP_URL] : ['http://localhost:3000', 'http://127.0.0.1:3000']);
+
 app.use(cors({
-  origin: allowedOrigin === '*' ? true : [allowedOrigin, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (NODE_ENV !== 'production') {
+      if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+        return callback(null, true);
+      }
+    }
+    if (corsOrigins.includes(origin) || corsOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true
 }));
 
@@ -58,52 +72,22 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// 4. Lightweight in-memory rate limiter for auth and submissions
-const rateLimitMap = new Map();
-function createRateLimiter(windowMs, maxRequests) {
-  return (req, res, next) => {
-    const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    const now = Date.now();
-    const entry = rateLimitMap.get(ip) || { count: 0, resetTime: now + windowMs };
-
-    if (now > entry.resetTime) {
-      entry.count = 1;
-      entry.resetTime = now + windowMs;
-    } else {
-      entry.count++;
-    }
-    rateLimitMap.set(ip, entry);
-
-    if (entry.count > maxRequests) {
-      return res.status(429).json({
-        error: 'Too many requests. Please slow down and try again shortly.'
-      });
-    }
-    next();
-  };
-}
-
-// Clean up stale rate limit entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of rateLimitMap.entries()) {
-    if (now > entry.resetTime) rateLimitMap.delete(ip);
-  }
-}, 300000);
-
-// Apply rate limiting to login and feedback submissions
-const authLimiter = createRateLimiter(60000, 30); // 30 req/min
-const submitLimiter = createRateLimiter(60000, 45); // 45 req/min
+// 4. Production Sliding Window Rate Limiters
+const { createSlidingWindowLimiter } = require('./src/middleware/rateLimiter');
+const authLimiter = createSlidingWindowLimiter({ windowMs: 60000, max: 30, message: 'Too many authentication attempts. Please try again shortly.' });
+const submitLimiter = createSlidingWindowLimiter({ windowMs: 60000, max: 45, message: 'Too many feedback submissions. Please slow down.' });
 
 // Serve static frontend assets
 app.use(express.static(FRONTEND_DIR));
 
-// Health check endpoint
+// Health check endpoint (Distinguishes running process from database readiness)
 app.get('/api/health', (req, res) => {
-  res.json({
+  const ready = isDbConnected();
+  return res.status(200).json({
     status: 'healthy',
+    ready,
+    database: ready ? 'connected' : 'disconnected',
     uptime: `${Math.floor(process.uptime())}s`,
-    database: isDbConnected() ? 'connected' : 'disconnected',
     environment: NODE_ENV
   });
 });
@@ -132,14 +116,17 @@ app.use((req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 
-// Global Error Handler
+// Global Error Handler (Sanitizes stack traces and secrets)
 app.use((err, req, res, next) => {
-  console.error('[Express Error Handler]:', err.stack || err);
+  const isCors = err.message && err.message.includes('CORS');
+  if (isCors) {
+    return res.status(403).json({ error: err.message });
+  }
   const status = err.statusCode || 500;
-  const message = NODE_ENV === 'production' && status === 500
+  const message = (NODE_ENV === 'production' && status === 500)
     ? 'Internal server error'
     : (err.message || 'Server error');
-  res.status(status).json({ error: message });
+  return res.status(status).json({ error: message });
 });
 
 // Start Server

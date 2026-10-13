@@ -35,8 +35,10 @@ const academicConfigSchema = new mongoose.Schema(
     departments: { type: [String], default: [] },
     courses: { type: [String], default: [] },
     years: { type: [String], default: [] },
+    academicYears: { type: [String], default: [] },
     semesters: { type: [String], default: [] },
     sections: { type: [String], default: [] },
+    feedbackCategories: { type: [String], default: [] },
     faculty: { type: [facultySchema], default: [] },
     subjects: { type: [subjectSchema], default: [] }
   },
@@ -98,8 +100,10 @@ const businessSchema = new mongoose.Schema(
         departments: ['Computer Science (CSE)', 'Electronics (ECE)', 'Mechanical (MECH)', 'Civil Engineering', 'Information Technology'],
         courses: ['B.Tech / B.E.', 'M.Tech', 'BCA', 'MCA', 'B.Sc / M.Sc', 'MBA'],
         years: ['1st Year', '2nd Year', '3rd Year', '4th Year'],
+        academicYears: ['2023-2024', '2024-2025', '2025-2026', '2026-2027'],
         semesters: ['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4', 'Semester 5', 'Semester 6', 'Semester 7', 'Semester 8'],
         sections: ['Section A', 'Section B', 'Section C'],
+        feedbackCategories: ['Teaching & Delivery', 'Course Content & Syllabus', 'Lab & Practical Experience', 'Internal Assessment & Grading', 'Mentorship & Guidance', 'Infrastructure & Facilities', 'Other'],
         faculty: [],
         subjects: []
       })

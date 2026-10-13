@@ -86,13 +86,13 @@
     const fields = [
       { key: 'department', label: 'Department / Branch', enabled: config.departmentEnabled, required: config.departmentRequired, options: academicConfig?.departments || [] },
       { key: 'course', label: 'Course / Program', enabled: config.courseEnabled, required: config.courseRequired, options: academicConfig?.courses || [] },
-      { key: 'academicYear', label: 'Academic Year', enabled: config.academicYearEnabled, required: config.academicYearRequired, options: ['2026-2027', '2025-2026', '2024-2025'] },
+      { key: 'academicYear', label: 'Academic Year', enabled: config.academicYearEnabled, required: config.academicYearRequired, options: (academicConfig?.academicYears && academicConfig.academicYears.length > 0) ? academicConfig.academicYears : ['2023-2024', '2024-2025', '2025-2026', '2026-2027'] },
       { key: 'yearOfStudy', label: 'Year of Study', enabled: config.yearOfStudyEnabled, required: config.yearOfStudyRequired, options: academicConfig?.years || ['1st Year', '2nd Year', '3rd Year', '4th Year'] },
       { key: 'semester', label: 'Semester', enabled: config.semesterEnabled, required: config.semesterRequired, options: academicConfig?.semesters || ['Semester 1', 'Semester 2', 'Semester 3', 'Semester 4', 'Semester 5', 'Semester 6', 'Semester 7', 'Semester 8'] },
       { key: 'section', label: 'Class / Section', enabled: config.sectionEnabled, required: config.sectionRequired, options: academicConfig?.sections || ['Section A', 'Section B', 'Section C'] },
       { key: 'faculty', label: 'Faculty Member', enabled: config.facultyEnabled, required: config.facultyRequired, options: (academicConfig?.faculty || []).map(f => f.name || f) },
       { key: 'subject', label: 'Subject / Course Unit', enabled: config.subjectEnabled, required: config.subjectRequired, options: (academicConfig?.subjects || []).map(s => s.name ? `${s.name} (${s.code || ''})` : s) },
-      { key: 'category', label: 'Feedback Category', enabled: config.categoryEnabled, required: config.categoryRequired, options: ['Teaching & Pedagogy', 'Laboratory / Practical', 'Library Facilities', 'Hostel Facilities', 'Canteen & Food', 'Wi-Fi & Campus Internet', 'Cleanliness & Infrastructure'] }
+      { key: 'category', label: 'Feedback Category', enabled: config.categoryEnabled, required: config.categoryRequired, options: (academicConfig?.feedbackCategories && academicConfig.feedbackCategories.length > 0) ? academicConfig.feedbackCategories : ['Teaching & Pedagogy', 'Laboratory / Practical', 'Library Facilities', 'Hostel Facilities', 'Canteen & Food', 'Wi-Fi & Campus Internet', 'Cleanliness & Infrastructure'] }
     ];
 
     const activeFields = fields.filter(f => f.enabled);
@@ -378,6 +378,13 @@
         else if (op === 'in' && Array.isArray(target)) satisfied = target.some(t => String(t).trim() === String(parentVal).trim());
         else if (op === 'greater_than') satisfied = Number(parentVal) > Number(target);
         else if (op === 'less_than') satisfied = Number(parentVal) < Number(target);
+        else if (op === 'contains') {
+          if (Array.isArray(parentVal)) {
+            satisfied = parentVal.some(t => String(t).toLowerCase().includes(String(target).toLowerCase()));
+          } else {
+            satisfied = String(parentVal).toLowerCase().includes(String(target).toLowerCase());
+          }
+        }
       }
 
       if (satisfied) {

@@ -8,6 +8,9 @@
     "dev": "node --watch backend/server.js",
     "test": "node backend/tests/run-all-tests.js",
     "test:security": "node backend/tests/security-tests.js",
+    "test:nps": "node backend/tests/nps-rating-tests.js",
+    "test:injection": "node backend/tests/injection-validation-tests.js",
+    "test:college": "node backend/tests/college-e2e-test.js",
     "test:responsive": "node backend/tests/cdp-responsive-test.js",
     "seed": "node backend/scripts/seed.js",
     "migrate:mongo": "node backend/scripts/migrate-json-to-mongo.js"

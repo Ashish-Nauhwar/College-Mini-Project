@@ -48,7 +48,11 @@ ENABLE_DEMO_MODE=true
 ```
 
 > [!IMPORTANT]
-> In production (`NODE_ENV=production`), the backend validates `JWT_SECRET` at startup and will terminate immediately if the secret is absent, insecure, or fewer than 32 characters.
+> In production (`NODE_ENV=production`), the backend validates `JWT_SECRET` at startup and terminates immediately if the secret is absent, insecure, or fewer than 32 characters.
+> You can generate a cryptographically strong 64-hex-character secret using:
+> ```bash
+> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+> ```
 
 ---
 
@@ -97,10 +101,15 @@ npm start
 2. **Multi-Tenant Data Isolation**:
    * All database queries for forms, feedback, internal notes, locations, analytics, settings, and CSV exports are explicitly scoped to `req.user.businessId`.
    * Cross-tenant query tampering is blocked on the server.
-3. **No Review Gating**:
+3. **Sliding-Window Rate Limiting**:
+   * Production zero-dependency rate limiter with sliding window IP tracking.
+   * Emits standard RFC `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, and `Retry-After` (on HTTP 429).
+4. **Health & Readiness Check**:
+   * `GET /api/health` distinguishes between running process liveness (`status: healthy`) and database readiness (`ready: true/false`).
+5. **No Review Gating**:
    * In compliance with consumer review guidelines, the optional Google Review prompt is displayed to all respondents if a Google Business URL is configured, regardless of star rating.
    * Low-star ratings (1-3 stars) simultaneously present reassurance of direct internal managerial follow-up without hiding public review options.
-4. **Token Hygiene**:
+6. **Token Hygiene**:
    * JWT payloads contain only non-sensitive identifiers (`id`, `role`, `businessId`). Passwords, hashes, and PII are never encoded into tokens.
 
 ---
@@ -119,7 +128,7 @@ npm start
 9. **Email Address** (`email`): Validated email input.
 10. **Phone Number** (`phone`): Validated telephone input.
 11. **Numeric Value** (`number`): Quantitative score or metric input.
-12. **Date Picker** (`date`): Standardized calendar picker.
+12. **Date Picker** (`date`): Standardized calendar picker with strict server-side validation.
 
 ### Real-Time Conditional Logic
 Questions support dynamic visibility rules configured directly in the Form Builder:
@@ -128,6 +137,7 @@ Questions support dynamic visibility rules configured directly in the Form Build
 
 ### College & Institutional Academic Master Data
 * **Academic Form Toggles**: Configure department, course/degree, academic year, semester, section/batch, faculty member, subject, and category.
+* **Server-Side Validation**: Server validates that submitted faculty members and subjects strictly belong to the selected department according to `business.academicConfig`.
 * **Anonymous Submissions**: Toggling "Allow Anonymous Submissions" hides mandatory student name and contact requirements.
 * **Academic Master Data Management**: Manage campus directories (departments, courses, faculty directory, and course mappings) in Business Settings.
 
@@ -141,35 +151,39 @@ Questions support dynamic visibility rules configured directly in the Form Build
 
 ---
 
-## 🧪 Automated Testing
+## 🧪 Automated Testing Architecture
 
-### Run All Automated Tests
+### Run All Automated Suites
 ```bash
 npm test
 ```
+Executes all four primary automated test suites with clear PASS / FAIL summary reporting.
 
-### Security & RBAC Suite
+### Individual Test Suites
 ```bash
+# 1. Security, RBAC & Isolation Suite (16 Tests)
 npm run test:security
-```
-Tests verified:
-* Health check and live measured uptime (`process.uptime()`).
-* Demo switch security (super-admin escalation rejection).
-* JWT token hygiene and signature verification.
-* RBAC access control on `/api/admin/overview`.
-* Multi-tenant data isolation negative tests.
-* Server-side conditional logic evaluation across all operators.
-* Anti-review gating compliance across 1★ to 5★ ratings.
-* Mongoose schema constraints for all 6 business types, structured addresses, and 12 question types.
 
-### Native Edge CDP Responsive Verification
-```bash
+# 2. NPS & Rating Formula Correctness Suite (11 Tests)
+npm run test:nps
+
+# 3. Injection Hardening & Form Builder Validation Suite (7 Tests)
+npm run test:injection
+
+# 4. College Academic 12-Step End-to-End Scenario Suite (17 Tests)
+npm run test:college
+
+# 5. Native Edge CDP Responsive Multi-Device Verification (320px - 1440px)
 npm run test:responsive
 ```
-Runs an automated browser verification using Microsoft Edge via the Chrome DevTools Protocol:
-* Viewports tested: `320px`, `360px`, `375px`, `390px`, `430px`, `768px`, `1024px`, and `1440px`.
-* Verifies zero horizontal scrolling (`scrollWidth <= clientWidth`) across all 12 application pages.
-* Verifies 0 browser console errors during all page visits and interactions.
+
+### Verified Acceptance Criteria:
+* **NPS Accuracy**: NPS formula strictly computed from 0–10 NPS answers (`Promoters (9-10) - Detractors (0-6)`). Star ratings (1-5) and NPS are completely segregated. Forms without rating or NPS return explicit `N/A` without fabricated 5 stars or NaN crashes.
+* **Injection Hardening**: Question IDs with XSS or directory traversal are sanitized. Blank question labels and option-less choices are rejected with HTTP 400. Self-referential conditional loops and dependencies on non-existent questions are blocked.
+* **College Field Validation**: Department, faculty, subject, and academic years are strictly validated against institutional master data. Cross-departmental faculty mismatches are rejected with HTTP 400.
+* **Form Lifecycle**: New forms default to `draft`. Draft and paused forms strictly reject public submissions with HTTP 403. Form QR pages indicate draft/paused status.
+* **Tenant Isolation**: Forms, locations, feedback, and analytics are isolated per tenant. Cross-business view or modification attempts are blocked with HTTP 403.
+* **Test Isolation**: Automated test suites run in isolated test database mode so offline environments or disconnected Atlas clusters do not yield false 503s. Negative tests prove genuine HTTP 400 and 403 status codes.
 
 ---
 

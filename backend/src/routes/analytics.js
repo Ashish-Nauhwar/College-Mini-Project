@@ -12,7 +12,7 @@ router.get('/dashboard', requireAuth, async (req, res) => {
 
     if (!businessId) {
       return res.json({
-        summary: { total: 0, avgRating: '0.0', npsScore: 0, pendingComplaints: 0, resolutionRate: 100, resolvedComplaints: 0, totalComplaints: 0 },
+        summary: { total: 0, avgRating: 'N/A', npsScore: 'N/A', pendingComplaints: 0, resolutionRate: 100, resolvedComplaints: 0, totalComplaints: 0 },
         sentimentCounts: { positive: 0, neutral: 0, negative: 0 },
         ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
         timeline: [],
@@ -44,17 +44,27 @@ router.get('/dashboard', requireAuth, async (req, res) => {
     }
 
     const total = list.length;
-    const avgRating = total > 0
-      ? (list.reduce((acc, cur) => acc + (cur.rating || 0), 0) / total).toFixed(1)
-      : '0.0';
 
-    // Calculate NPS
-    const npsResponses = list.filter(fb => fb.rating !== undefined && fb.rating !== null);
-    let npsScore = 0;
+    // Average Star Rating: calculate ONLY from feedbacks that have a rating
+    const ratedResponses = list.filter(fb => typeof fb.rating === 'number' && !isNaN(fb.rating));
+    const avgRating = ratedResponses.length > 0
+      ? (ratedResponses.reduce((acc, cur) => acc + cur.rating, 0) / ratedResponses.length).toFixed(1)
+      : 'N/A';
+
+    // Standard NPS Calculation (0-10 scale)
+    // 0-6: detractors, 7-8: passives, 9-10: promoters
+    // NPS = % promoters - % detractors
+    const npsResponses = list.filter(fb => typeof fb.nps === 'number' && !isNaN(fb.nps) && fb.nps >= 0 && fb.nps <= 10);
+    let npsScore = 'N/A';
+    let npsPromoters = 0;
+    let npsPassives = 0;
+    let npsDetractors = 0;
+
     if (npsResponses.length > 0) {
-      const promoters = npsResponses.filter(fb => fb.rating >= 4).length;
-      const detractors = npsResponses.filter(fb => fb.rating <= 2).length;
-      npsScore = Math.round(((promoters - detractors) / npsResponses.length) * 100);
+      npsPromoters = npsResponses.filter(fb => fb.nps >= 9).length;
+      npsPassives = npsResponses.filter(fb => fb.nps >= 7 && fb.nps <= 8).length;
+      npsDetractors = npsResponses.filter(fb => fb.nps <= 6).length;
+      npsScore = Math.round(((npsPromoters - npsDetractors) / npsResponses.length) * 100);
     }
 
     // Sentiment Breakdown
@@ -64,7 +74,7 @@ router.get('/dashboard', requireAuth, async (req, res) => {
       negative: list.filter(fb => fb.sentiment === 'negative').length
     };
 
-    // Rating Breakdown (1 to 5 stars)
+    // Rating Breakdown (1 to 5 stars only for rated submissions)
     const ratingCounts = {
       1: list.filter(fb => fb.rating === 1).length,
       2: list.filter(fb => fb.rating === 2).length,
@@ -73,8 +83,12 @@ router.get('/dashboard', requireAuth, async (req, res) => {
       5: list.filter(fb => fb.rating === 5).length
     };
 
-    // Resolution metrics
-    const complaints = list.filter(fb => (fb.rating || 5) <= 2);
+    // Resolution metrics: negative rating (<=2), or negative NPS (<=6), or negative sentiment
+    const complaints = list.filter(fb =>
+      typeof fb.rating === 'number'
+        ? fb.rating <= 2
+        : (typeof fb.nps === 'number' ? fb.nps <= 6 : fb.sentiment === 'negative')
+    );
     const resolvedComplaints = complaints.filter(fb => fb.status === 'resolved').length;
     const pendingComplaints = complaints.filter(fb => fb.status !== 'resolved').length;
     const resolutionRate = complaints.length > 0
@@ -86,7 +100,7 @@ router.get('/dashboard', requireAuth, async (req, res) => {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      dateMap[key] = { date: key, count: 0, totalRating: 0 };
+      dateMap[key] = { date: key, count: 0, ratedCount: 0, totalRating: 0 };
     }
 
     list.forEach(fb => {
@@ -94,14 +108,17 @@ router.get('/dashboard', requireAuth, async (req, res) => {
       const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       if (dateMap[key]) {
         dateMap[key].count += 1;
-        dateMap[key].totalRating += (fb.rating || 0);
+        if (typeof fb.rating === 'number' && !isNaN(fb.rating)) {
+          dateMap[key].ratedCount += 1;
+          dateMap[key].totalRating += fb.rating;
+        }
       }
     });
 
     const timeline = Object.values(dateMap).map(item => ({
       date: item.date,
       count: item.count,
-      avgRating: item.count > 0 ? (item.totalRating / item.count).toFixed(1) : 0
+      avgRating: item.ratedCount > 0 ? (item.totalRating / item.ratedCount).toFixed(1) : null
     }));
 
     // Location breakdown
@@ -113,16 +130,17 @@ router.get('/dashboard', requireAuth, async (req, res) => {
         return fbLoc === locIdStr;
       });
 
-      const locAvg = locFeedbacks.length > 0
-        ? (locFeedbacks.reduce((s, f) => s + (f.rating || 0), 0) / locFeedbacks.length).toFixed(1)
-        : '0.0';
+      const locRated = locFeedbacks.filter(f => typeof f.rating === 'number' && !isNaN(f.rating));
+      const locAvg = locRated.length > 0
+        ? (locRated.reduce((s, f) => s + f.rating, 0) / locRated.length).toFixed(1)
+        : 'N/A';
 
       return {
         id: locIdStr,
         name: loc.name,
         total: locFeedbacks.length,
         avgRating: locAvg,
-        pending: locFeedbacks.filter(f => f.status !== 'resolved' && (f.rating || 5) <= 2).length
+        pending: locFeedbacks.filter(f => f.status !== 'resolved' && (typeof f.rating === 'number' ? f.rating <= 2 : f.sentiment === 'negative')).length
       };
     });
 
@@ -131,6 +149,12 @@ router.get('/dashboard', requireAuth, async (req, res) => {
         total,
         avgRating,
         npsScore,
+        npsDetails: {
+          promoters: npsPromoters,
+          passives: npsPassives,
+          detractors: npsDetractors,
+          total: npsResponses.length
+        },
         pendingComplaints,
         resolutionRate,
         resolvedComplaints,

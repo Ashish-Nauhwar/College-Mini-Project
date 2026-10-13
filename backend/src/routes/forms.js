@@ -411,6 +411,85 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
+function validateAndSanitizeQuestions(rawQuestions) {
+  if (!Array.isArray(rawQuestions)) return { error: null, questions: [] };
+
+  const idSet = new Set();
+  const sanitized = [];
+
+  for (let idx = 0; idx < rawQuestions.length; idx++) {
+    const q = rawQuestions[idx];
+    if (!q || typeof q !== 'object') {
+      return { error: `Invalid question format at position ${idx + 1}` };
+    }
+
+    const text = q.text ? String(q.text).trim() : '';
+    if (!text) {
+      return { error: `Question label cannot be empty (question #${idx + 1})` };
+    }
+
+    const allowedTypes = [
+      'rating', 'nps', 'text', 'multiline', 'choice', 'select',
+      'checkbox', 'yesno', 'email', 'phone', 'number', 'date'
+    ];
+    const type = q.type && allowedTypes.includes(q.type) ? q.type : null;
+    if (!type) {
+      return { error: `Invalid question type "${q.type}" for question #${idx + 1}` };
+    }
+
+    let qId = q.id && typeof q.id === 'string' ? q.id.trim() : '';
+    const safeIdRegex = /^[a-zA-Z0-9_-]{1,64}$/;
+    if (!qId || !safeIdRegex.test(qId) || idSet.has(qId)) {
+      qId = `q_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+    }
+    idSet.add(qId);
+
+    let options = [];
+    if (['choice', 'select', 'checkbox'].includes(type)) {
+      options = Array.isArray(q.options)
+        ? q.options.map(opt => String(opt).trim()).filter(Boolean)
+        : [];
+      if (options.length === 0) {
+        return { error: `Question "${text}" of type "${type}" must have at least one valid option` };
+      }
+    }
+
+    sanitized.push({
+      id: qId,
+      type,
+      text,
+      description: q.description ? String(q.description).trim() : '',
+      placeholder: q.placeholder ? String(q.placeholder).trim() : '',
+      required: Boolean(q.required),
+      min: typeof q.min === 'number' ? q.min : (type === 'nps' ? 0 : 1),
+      max: typeof q.max === 'number' ? q.max : (type === 'nps' ? 10 : 5),
+      options,
+      multiline: Boolean(q.multiline),
+      order: typeof q.order === 'number' ? q.order : idx,
+      conditional: q.conditional && q.conditional.dependsOn ? {
+        dependsOn: String(q.conditional.dependsOn).trim(),
+        operator: ['equals', 'not_equals', 'in', 'greater_than', 'less_than', 'contains'].includes(q.conditional.operator)
+          ? q.conditional.operator
+          : 'equals',
+        value: q.conditional.value
+      } : null
+    });
+  }
+
+  for (const q of sanitized) {
+    if (q.conditional) {
+      if (q.conditional.dependsOn === q.id) {
+        return { error: `Question "${q.text}" cannot depend on itself` };
+      }
+      if (!idSet.has(q.conditional.dependsOn)) {
+        return { error: `Question "${q.text}" depends on non-existent question "${q.conditional.dependsOn}"` };
+      }
+    }
+  }
+
+  return { error: null, questions: sanitized };
+}
+
 // POST /api/forms (Authenticated - Multi-Tenant Scoped)
 router.post('/', requireAuth, async (req, res) => {
   try {
@@ -436,32 +515,35 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No business linked to your account' });
     }
 
+    // Verify locationId belongs to user's business
+    if (locationId) {
+      const loc = await db.getLocationById(locationId);
+      if (!loc || loc.businessId.toString() !== businessId.toString()) {
+        return res.status(400).json({ error: 'Specified location does not belong to your business' });
+      }
+    }
+
     const slugCandidate = (slug || title)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'form';
 
-    const cleanSlug = `${slugCandidate}-${Math.random().toString(36).substring(2, 6)}`;
+    let cleanSlug = `${slugCandidate}-${Math.random().toString(36).substring(2, 6)}`;
+    let existingForm = await db.getFormBySlug(cleanSlug);
+    let attempts = 0;
+    while (existingForm && attempts < 5) {
+      cleanSlug = `${slugCandidate}-${Math.random().toString(36).substring(2, 8)}`;
+      existingForm = await db.getFormBySlug(cleanSlug);
+      attempts++;
+    }
 
     // Validate and sanitize questions
-    const validatedQuestions = (questions || []).map((q, idx) => ({
-      id: q.id || `q_${Date.now()}_${idx}`,
-      type: q.type || 'text',
-      text: (q.text && q.text.trim()) || 'Untitled Question',
-      description: q.description || '',
-      placeholder: q.placeholder || '',
-      required: Boolean(q.required),
-      min: q.min !== undefined ? q.min : 1,
-      max: q.max !== undefined ? q.max : 5,
-      options: Array.isArray(q.options) ? q.options.filter(opt => opt && opt.trim()) : [],
-      multiline: Boolean(q.multiline),
-      order: q.order !== undefined ? q.order : idx,
-      conditional: q.conditional && q.conditional.dependsOn ? {
-        dependsOn: q.conditional.dependsOn,
-        operator: q.conditional.operator || 'equals',
-        value: q.conditional.value
-      } : null
-    }));
+    const qValidation = validateAndSanitizeQuestions(questions);
+    if (qValidation.error) {
+      return res.status(400).json({ error: qValidation.error });
+    }
+
+    const initialStatus = ['draft', 'published', 'paused', 'archived'].includes(status) ? status : 'draft';
 
     const newForm = await db.createForm({
       businessId,
@@ -470,17 +552,17 @@ router.post('/', requireAuth, async (req, res) => {
       title: title.trim(),
       description: description ? description.trim() : '',
       formType: formType || 'general',
-      status: ['draft', 'published', 'paused', 'archived'].includes(status) ? status : 'published',
+      status: initialStatus,
       googleReviewUrl: googleReviewUrl ? googleReviewUrl.trim() : '',
       allowAnonymous: allowAnonymous !== false,
       collegeFieldsConfig: collegeFieldsConfig || {},
-      questions: validatedQuestions
+      questions: qValidation.questions
     });
 
     await db.logAudit(
       'Form Created',
       req.user.name,
-      `Created form "${newForm.title}" (${newForm.slug})`,
+      `Created form "${newForm.title}" (${newForm.slug}) in ${newForm.status} status`,
       businessId,
       req.ip
     );
@@ -529,34 +611,41 @@ router.put('/:id', requireAuth, async (req, res) => {
     } = req.body;
 
     const updates = {};
-    if (title && title.trim()) updates.title = title.trim();
+    if (title !== undefined) {
+      if (!title || !title.trim()) {
+        return res.status(400).json({ error: 'Form title cannot be empty' });
+      }
+      updates.title = title.trim();
+    }
     if (description !== undefined) updates.description = description.trim();
-    if (locationId !== undefined) updates.locationId = locationId || null;
-    if (status && ['draft', 'published', 'paused', 'archived'].includes(status)) updates.status = status;
+    if (locationId !== undefined) {
+      if (locationId) {
+        const loc = await db.getLocationById(locationId);
+        if (!loc || loc.businessId.toString() !== form.businessId.toString()) {
+          return res.status(400).json({ error: 'Specified location does not belong to this business' });
+        }
+        updates.locationId = locationId;
+      } else {
+        updates.locationId = null;
+      }
+    }
+    if (status !== undefined) {
+      if (!['draft', 'published', 'paused', 'archived'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid form status' });
+      }
+      updates.status = status;
+    }
     if (formType) updates.formType = formType;
     if (googleReviewUrl !== undefined) updates.googleReviewUrl = googleReviewUrl.trim();
     if (allowAnonymous !== undefined) updates.allowAnonymous = Boolean(allowAnonymous);
     if (collegeFieldsConfig !== undefined) updates.collegeFieldsConfig = collegeFieldsConfig;
 
-    if (Array.isArray(questions)) {
-      updates.questions = questions.map((q, idx) => ({
-        id: q.id || `q_${Date.now()}_${idx}`,
-        type: q.type || 'text',
-        text: (q.text && q.text.trim()) || 'Question',
-        description: q.description || '',
-        placeholder: q.placeholder || '',
-        required: Boolean(q.required),
-        min: q.min !== undefined ? q.min : 1,
-        max: q.max !== undefined ? q.max : 5,
-        options: Array.isArray(q.options) ? q.options.filter(opt => opt && opt.trim()) : [],
-        multiline: Boolean(q.multiline),
-        order: q.order !== undefined ? q.order : idx,
-        conditional: q.conditional && q.conditional.dependsOn ? {
-          dependsOn: q.conditional.dependsOn,
-          operator: q.conditional.operator || 'equals',
-          value: q.conditional.value
-        } : null
-      }));
+    if (questions !== undefined) {
+      const qValidation = validateAndSanitizeQuestions(questions);
+      if (qValidation.error) {
+        return res.status(400).json({ error: qValidation.error });
+      }
+      updates.questions = qValidation.questions;
     }
 
     const updated = await db.updateForm(req.params.id, updates);

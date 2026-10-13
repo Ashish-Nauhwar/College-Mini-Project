@@ -284,9 +284,21 @@ const app = (function () {
 
       const s = analyticsData.summary;
       document.getElementById('statTotalResponses').textContent = s.total;
-      document.getElementById('statAvgRating').textContent = s.avgRating;
-      document.getElementById('statRatingStars').textContent = '★'.repeat(Math.round(parseFloat(s.avgRating))) + '☆'.repeat(5 - Math.round(parseFloat(s.avgRating)));
-      document.getElementById('statNpsScore').textContent = (s.npsScore >= 0 ? '+' : '') + s.npsScore;
+      const avgNum = parseFloat(s.avgRating);
+      const hasRating = s.avgRating !== 'N/A' && !isNaN(avgNum);
+      document.getElementById('statAvgRating').textContent = hasRating ? s.avgRating : 'N/A';
+      if (hasRating) {
+        const rounded = Math.max(0, Math.min(5, Math.round(avgNum)));
+        document.getElementById('statRatingStars').textContent = '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+      } else {
+        document.getElementById('statRatingStars').textContent = 'No rating data';
+      }
+
+      if (s.npsScore !== 'N/A' && typeof s.npsScore === 'number') {
+        document.getElementById('statNpsScore').textContent = (s.npsScore >= 0 ? '+' : '') + s.npsScore;
+      } else {
+        document.getElementById('statNpsScore').textContent = 'N/A';
+      }
       document.getElementById('statPendingComplaints').textContent = s.pendingComplaints;
       document.getElementById('statResolutionRate').textContent = `${s.resolutionRate}% Resolved`;
 
@@ -475,8 +487,10 @@ const app = (function () {
           <tr>
             <td>
               <div style="font-weight:700; color:#f59e0b;">
-                ${'★'.repeat(fb.rating)}${'☆'.repeat(5 - fb.rating)}
-                <span style="color:var(--neutral-700); font-size:0.85rem; margin-left:4px;">(${fb.rating})</span>
+                ${(typeof fb.rating === 'number' && !isNaN(fb.rating))
+                  ? `${'★'.repeat(fb.rating)}${'☆'.repeat(5 - fb.rating)} <span style="color:var(--neutral-700); font-size:0.85rem; margin-left:4px;">(${fb.rating})</span>`
+                  : (typeof fb.nps === 'number' ? `<span style="color:var(--primary); font-size:0.85rem;">NPS: ${fb.nps}/10</span>` : '<span style="color:var(--neutral-400); font-size:0.85rem;">N/A</span>')
+                }
               </div>
             </td>
             <td>
@@ -504,7 +518,9 @@ const app = (function () {
   }
 
   function createFeedbackCardHtml(fb) {
-    const stars = '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating);
+    const stars = (typeof fb.rating === 'number' && !isNaN(fb.rating))
+      ? `${'★'.repeat(fb.rating)}${'☆'.repeat(5 - fb.rating)}`
+      : (typeof fb.nps === 'number' ? `NPS: ${fb.nps}/10` : 'No Star Rating');
     const dateFormatted = new Date(fb.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     return `
@@ -548,7 +564,9 @@ const app = (function () {
       const modalBody = document.getElementById('modalFbBody');
 
       const dateStr = new Date(fb.createdAt).toLocaleString();
-      const stars = '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating);
+      const stars = (typeof fb.rating === 'number' && !isNaN(fb.rating))
+        ? `${'★'.repeat(fb.rating)}${'☆'.repeat(5 - fb.rating)}`
+        : (typeof fb.nps === 'number' ? `NPS Score: ${fb.nps}/10` : 'No Star Rating');
 
       // Render Modal Content
       modalBody.innerHTML = `
@@ -1099,6 +1117,22 @@ const app = (function () {
       return;
     }
 
+    // Validate questions: non-blank labels and non-blank choices
+    for (let i = 0; i < (payload.questions || []).length; i++) {
+      const q = payload.questions[i];
+      if (!q.text || !q.text.trim()) {
+        showToast(`Question #${i + 1} cannot have an empty label`, 'error');
+        return;
+      }
+      if (['choice', 'select', 'checkbox'].includes(q.type)) {
+        const validOptions = (q.options || []).filter(o => o && o.trim());
+        if (validOptions.length === 0) {
+          showToast(`Question #${i + 1} ("${q.text.trim()}") requires at least one option`, 'error');
+          return;
+        }
+      }
+    }
+
     try {
       const res = await api(`/api/forms/${currentBuilderForm.id}`, {
         method: 'PUT',
@@ -1349,9 +1383,10 @@ const app = (function () {
 
       const select = document.getElementById('qrFormSelect');
       if (select) {
-        select.innerHTML = forms.map(f => `
-          <option value="${f.slug}">${escapeHtml(f.title)} (${escapeHtml(f.locationName || 'General')})</option>
-        `).join('');
+        select.innerHTML = forms.map(f => {
+          const statusTag = f.status !== 'published' ? ` [${f.status.toUpperCase()}]` : '';
+          return `<option value="${f.slug}">${escapeHtml(f.title)} (${escapeHtml(f.locationName || 'General')})${statusTag}</option>`;
+        }).join('');
 
         const selectedSlug = select.value || (forms.length > 0 ? forms[0].slug : 'apex-downtown');
         renderSelectedQr(selectedSlug);
@@ -1366,13 +1401,20 @@ const app = (function () {
 
   function renderSelectedQr(slug) {
     const targetSlug = slug || (forms && forms[0] ? forms[0].slug : 'apex-downtown');
+    const matchedForm = (forms || []).find(f => f.slug === targetSlug);
     const canvas = document.getElementById('qrCodeCanvas');
     const urlText = document.getElementById('qrTargetUrlText');
     const openLink = document.getElementById('qrOpenFormLink');
 
     const formUrl = `${window.location.origin}/feedback/${targetSlug}`;
 
-    if (urlText) urlText.textContent = formUrl;
+    if (urlText) {
+      if (matchedForm && matchedForm.status !== 'published') {
+        urlText.innerHTML = `${escapeHtml(formUrl)} <div style="margin-top:6px; padding:4px 8px; font-size:0.8rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700;">⚠️ Form status is "${matchedForm.status.toUpperCase()}". Public responses will be blocked until published in Form Builder.</div>`;
+      } else {
+        urlText.textContent = formUrl;
+      }
+    }
     if (openLink) openLink.href = formUrl;
 
     if (canvas) {

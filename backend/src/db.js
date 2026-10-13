@@ -1,13 +1,41 @@
 /**
  * Persistent Database Layer using MongoDB Atlas & Mongoose
- * Enforces tenant data isolation and schema validation.
+ * Enforces tenant data isolation, schema validation, and supports isolated test mode.
  */
 
 const mongoose = require('mongoose');
 const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('./models');
 const { isDbConnected } = require('./config/db');
 
+let mockDbMode = process.env.TEST_MOCK_DB === 'true';
+const mockStore = {
+  users: new Map(),
+  businesses: new Map(),
+  locations: new Map(),
+  forms: new Map(),
+  feedbacks: new Map(),
+  auditLogs: []
+};
+
+function enableMockDb(enable = true) {
+  mockDbMode = Boolean(enable);
+}
+
+function clearMockDb() {
+  mockStore.users.clear();
+  mockStore.businesses.clear();
+  mockStore.locations.clear();
+  mockStore.forms.clear();
+  mockStore.feedbacks.clear();
+  mockStore.auditLogs.length = 0;
+}
+
+function isMockDbActive() {
+  return mockDbMode;
+}
+
 function checkConnection() {
+  if (mockDbMode) return;
   if (!isDbConnected()) {
     const error = new Error('Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.');
     error.statusCode = 503;
@@ -19,84 +47,174 @@ function checkConnection() {
 async function findUserByEmail(email) {
   checkConnection();
   if (!email) return null;
-  return User.findOne({ email: email.toLowerCase().trim() });
+  const cleanEmail = email.toLowerCase().trim();
+  if (mockDbMode) {
+    return Array.from(mockStore.users.values()).find(u => u.email === cleanEmail) || null;
+  }
+  return User.findOne({ email: cleanEmail });
 }
 
 async function findUserById(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    return mockStore.users.get(idStr) || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return User.findById(id);
 }
 
 async function createUser(userData) {
   checkConnection();
+  const cleanEmail = userData.email.toLowerCase().trim();
+  if (mockDbMode) {
+    const doc = new User({ ...userData, email: cleanEmail, _id: userData._id || new mongoose.Types.ObjectId() });
+    const err = doc.validateSync();
+    if (err) throw err;
+    const obj = doc.toObject();
+    obj._id = doc._id;
+    obj.id = doc._id.toString();
+    mockStore.users.set(obj.id, obj);
+    return obj;
+  }
   return User.create({
     ...userData,
-    email: userData.email.toLowerCase().trim()
+    email: cleanEmail
   });
 }
 
 async function getUsers(filter = {}) {
   checkConnection();
+  if (mockDbMode) {
+    return Array.from(mockStore.users.values());
+  }
   return User.find(filter).select('-password').sort({ createdAt: -1 });
 }
 
 // --- Businesses ---
 async function getBusinesses(filter = {}) {
   checkConnection();
+  if (mockDbMode) {
+    return Array.from(mockStore.businesses.values());
+  }
   return Business.find(filter).sort({ createdAt: -1 });
 }
 
 async function getBusinessById(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    return mockStore.businesses.get(idStr) || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Business.findById(id);
 }
 
 async function createBusiness(bizData) {
   checkConnection();
+  if (mockDbMode) {
+    const doc = new Business({ ...bizData, _id: bizData._id || new mongoose.Types.ObjectId() });
+    const err = doc.validateSync();
+    if (err) throw err;
+    const obj = doc.toObject();
+    obj._id = doc._id;
+    obj.id = doc._id.toString();
+    mockStore.businesses.set(obj.id, obj);
+    return obj;
+  }
   return Business.create(bizData);
 }
 
 async function updateBusiness(id, updates) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.businesses.get(idStr);
+    if (!curr) return null;
+    const updated = { ...curr, ...updates, updatedAt: new Date() };
+    mockStore.businesses.set(idStr, updated);
+    return updated;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Business.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
 }
 
 // --- Locations ---
 async function getLocations(businessId) {
   checkConnection();
+  if (mockDbMode) {
+    const all = Array.from(mockStore.locations.values());
+    return businessId ? all.filter(l => l.businessId.toString() === businessId.toString()) : all;
+  }
   const filter = businessId ? { businessId } : {};
   return Location.find(filter).sort({ createdAt: -1 });
 }
 
 async function getLocationById(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    return mockStore.locations.get(idStr) || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Location.findById(id);
 }
 
 async function createLocation(locationData) {
   checkConnection();
+  if (mockDbMode) {
+    const doc = new Location({ ...locationData, _id: locationData._id || new mongoose.Types.ObjectId() });
+    const err = doc.validateSync();
+    if (err) throw err;
+    const obj = doc.toObject();
+    obj._id = doc._id;
+    obj.id = doc._id.toString();
+    mockStore.locations.set(obj.id, obj);
+    return obj;
+  }
   return Location.create(locationData);
 }
 
 async function updateLocation(id, updates) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.locations.get(idStr);
+    if (!curr) return null;
+    const updated = { ...curr, ...updates, updatedAt: new Date() };
+    mockStore.locations.set(idStr, updated);
+    return updated;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Location.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
 }
 
 async function deleteLocation(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.locations.get(idStr);
+    mockStore.locations.delete(idStr);
+    return curr || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Location.findByIdAndDelete(id);
 }
 
 // --- Feedback Forms ---
 async function getForms(businessId, filter = {}) {
   checkConnection();
+  if (mockDbMode) {
+    let list = Array.from(mockStore.forms.values());
+    if (businessId) list = list.filter(f => f.businessId.toString() === businessId.toString());
+    return list;
+  }
   const query = { ...filter };
   if (businessId) query.businessId = businessId;
   return FeedbackForm.find(query).sort({ createdAt: -1 });
@@ -104,67 +222,153 @@ async function getForms(businessId, filter = {}) {
 
 async function getFormById(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    return mockStore.forms.get(idStr) || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return FeedbackForm.findById(id);
 }
 
 async function getFormBySlug(slug) {
   checkConnection();
   if (!slug) return null;
-  return FeedbackForm.findOne({ slug: slug.toLowerCase().trim() });
+  const cleanSlug = slug.toLowerCase().trim();
+  if (mockDbMode) {
+    return Array.from(mockStore.forms.values()).find(f => f.slug === cleanSlug) || null;
+  }
+  return FeedbackForm.findOne({ slug: cleanSlug });
 }
 
 async function createForm(formData) {
   checkConnection();
+  const cleanSlug = formData.slug.toLowerCase().trim();
+  if (mockDbMode) {
+    const doc = new FeedbackForm({ ...formData, slug: cleanSlug, _id: formData._id || new mongoose.Types.ObjectId() });
+    const err = doc.validateSync();
+    if (err) throw err;
+    const obj = doc.toObject();
+    obj._id = doc._id;
+    obj.id = doc._id.toString();
+    mockStore.forms.set(obj.id, obj);
+    return obj;
+  }
   return FeedbackForm.create({
     ...formData,
-    slug: formData.slug.toLowerCase().trim()
+    slug: cleanSlug
   });
 }
 
 async function updateForm(id, updates) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.forms.get(idStr);
+    if (!curr) return null;
+    const updated = { ...curr, ...updates, updatedAt: new Date() };
+    mockStore.forms.set(idStr, updated);
+    return updated;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return FeedbackForm.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
 }
 
 async function deleteForm(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.forms.get(idStr);
+    mockStore.forms.delete(idStr);
+    return curr || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return FeedbackForm.findByIdAndDelete(id);
 }
 
 // --- Feedback Submissions ---
 async function getFeedbacks(filter = {}) {
   checkConnection();
+  if (mockDbMode) {
+    let list = Array.from(mockStore.feedbacks.values());
+    if (filter.businessId) list = list.filter(f => f.businessId.toString() === filter.businessId.toString());
+    if (filter.formId) list = list.filter(f => f.formId.toString() === filter.formId.toString());
+    if (filter.locationId) list = list.filter(f => f.locationId && f.locationId.toString() === filter.locationId.toString());
+    if (filter.status && filter.status !== 'all') list = list.filter(f => f.status === filter.status);
+    if (filter.priority && filter.priority !== 'all') list = list.filter(f => f.priority === filter.priority);
+    if (filter.rating && filter.rating !== 'all') list = list.filter(f => f.rating === filter.rating);
+    return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }
   return Feedback.find(filter).sort({ createdAt: -1 });
 }
 
 async function getFeedbackById(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    return mockStore.feedbacks.get(idStr) || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Feedback.findById(id);
 }
 
 async function createFeedback(data) {
   checkConnection();
+  if (mockDbMode) {
+    const doc = new Feedback({
+      ...data,
+      _id: data._id || new mongoose.Types.ObjectId(),
+      createdAt: data.createdAt || new Date(),
+      updatedAt: new Date()
+    });
+    const err = doc.validateSync();
+    if (err) throw err;
+    const obj = doc.toObject();
+    obj._id = doc._id;
+    obj.id = doc._id.toString();
+    mockStore.feedbacks.set(obj.id, obj);
+    return obj;
+  }
   return Feedback.create(data);
 }
 
 async function updateFeedback(id, updates) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.feedbacks.get(idStr);
+    if (!curr) return null;
+    const updated = { ...curr, ...updates, updatedAt: new Date() };
+    mockStore.feedbacks.set(idStr, updated);
+    return updated;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Feedback.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
 }
 
 async function deleteFeedback(id) {
   checkConnection();
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    const curr = mockStore.feedbacks.get(idStr);
+    mockStore.feedbacks.delete(idStr);
+    return curr || null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Feedback.findByIdAndDelete(id);
 }
 
 // --- Audit Logs ---
 async function logAudit(action, actor, details = '', businessId = null, ip = '') {
+  if (mockDbMode) {
+    mockStore.auditLogs.push({ action, actor, details, businessId, ip, createdAt: new Date() });
+    return { action, actor, details };
+  }
   if (!isDbConnected()) return null;
   try {
     return await AuditLog.create({
@@ -182,11 +386,17 @@ async function logAudit(action, actor, details = '', businessId = null, ip = '')
 
 async function getAuditLogs(filter = {}, limit = 100) {
   checkConnection();
+  if (mockDbMode) {
+    return mockStore.auditLogs.slice(-limit).reverse();
+  }
   return AuditLog.find(filter).sort({ createdAt: -1 }).limit(limit);
 }
 
 module.exports = {
   checkConnection,
+  enableMockDb,
+  clearMockDb,
+  isMockDbActive,
   findUserByEmail,
   findUserById,
   createUser,

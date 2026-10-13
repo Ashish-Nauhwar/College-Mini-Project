@@ -47,8 +47,21 @@ const feedbackSchema = new mongoose.Schema(
     rating: {
       type: Number,
       min: 1,
-      max: 10,
+      max: 5,
+      default: null,
       index: true
+    },
+    nps: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: null,
+      index: true
+    },
+    npsAnswers: {
+      type: Map,
+      of: Number,
+      default: () => new Map()
     },
     sentiment: {
       type: String,
