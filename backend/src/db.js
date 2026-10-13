@@ -42,7 +42,11 @@ function isMockDbActive() {
 function checkConnection() {
   if (mockDbMode) return;
   if (!isDbConnected()) {
-    const error = new Error('Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.');
+    const isUriConfigured = Boolean(process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('<username>'));
+    const message = isUriConfigured
+      ? 'Database service temporarily unavailable. The database is currently reconnecting or unreachable. Please try again shortly.'
+      : 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in your environment configuration.';
+    const error = new Error(message);
     error.statusCode = 503;
     throw error;
   }
@@ -156,7 +160,7 @@ async function updateBusiness(id, updates) {
     return updated;
   }
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
-  return Business.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+  return Business.findByIdAndUpdate(id, updates, { returnDocument: 'after', runValidators: true });
 }
 
 async function findBusinessByEmail(email) {
@@ -230,7 +234,7 @@ async function updateLocation(id, updates) {
     return updated;
   }
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
-  return Location.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+  return Location.findByIdAndUpdate(id, updates, { returnDocument: 'after', runValidators: true });
 }
 
 async function deleteLocation(id) {
@@ -311,7 +315,7 @@ async function updateForm(id, updates) {
     return updated;
   }
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
-  return FeedbackForm.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+  return FeedbackForm.findByIdAndUpdate(id, updates, { returnDocument: 'after', runValidators: true });
 }
 
 async function deleteForm(id) {
@@ -386,7 +390,7 @@ async function updateFeedback(id, updates) {
     return updated;
   }
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
-  return Feedback.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+  return Feedback.findByIdAndUpdate(id, updates, { returnDocument: 'after', runValidators: true });
 }
 
 async function deleteFeedback(id) {

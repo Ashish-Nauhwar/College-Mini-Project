@@ -222,18 +222,30 @@ async function runPhase7Tests() {
     if (!isDisposableDatabase(dbName)) {
       console.log(`  [SAFETY REFUSAL] TEST_MONGODB_URI database "${dbName}" is not disposable. Skipped.`);
     } else {
-      let createdBizId = null;
-      let createdUserId = null;
-      let registeredToken = null;
-      const testEmail = `test_owner_${Date.now()}@domain.com`;
+      // Explicitly connect the Express application's Mongoose connection to TEST_MONGODB_URI
+      try {
+        if (mongoose.connection.readyState !== 1) {
+          await mongoose.connect(testUri, { serverSelectionTimeoutMS: 5000 });
+        }
+      } catch (connErr) {
+        console.error('  [Connection Error]: Failed to connect to TEST_MONGODB_URI:', connErr.message);
+      }
 
-      await it('Valid registration creates user, business, location, form and returns auth token', async () => {
+      const createdBizIds = [];
+      const createdUserIds = [];
+      let registeredToken = null;
+      const testEmailOnline = `test_online_${Date.now()}@domain.com`;
+      const testEmailCollege = `test_college_${Date.now()}@greenfield.edu`;
+
+      // 1. Online-only account creation
+      await it('1. Create an online-only account with all required fields (ownerName, isOnlineOnly: true)', async () => {
         const payload = {
-          businessName: `Test Enterprise ${Date.now()}`,
-          businessType: 'restaurant',
-          name: 'Jane Doe',
-          email: testEmail,
-          password: 'SecurePassword@123'
+          businessName: `Cloud Digital Services ${Date.now()}`,
+          businessType: 'other',
+          ownerName: 'Jane Online',
+          email: testEmailOnline,
+          password: 'SecurePassword@123',
+          isOnlineOnly: true
         };
 
         const res = await fetch(`${BASE_URL}/api/auth/register`, {
@@ -246,22 +258,83 @@ async function runPhase7Tests() {
         const data = await res.json();
         assert.ok(data.token, 'Response must contain JWT token');
         assert.ok(data.user, 'Response must contain user object');
-        assert.strictEqual(data.user.email, testEmail);
+        assert.strictEqual(data.user.email, testEmailOnline);
         assert.strictEqual(data.user.role, 'owner');
         assert.ok(data.business, 'Response must contain business object');
+        assert.strictEqual(data.business.isOnlineOnly, true);
 
         registeredToken = data.token;
-        createdBizId = data.business._id || data.business.id;
-        createdUserId = data.user._id || data.user.id;
+        createdBizIds.push(data.business._id || data.business.id);
+        createdUserIds.push(data.user._id || data.user.id);
       });
 
-      await it('Duplicate registration with same email is rejected with HTTP 409 without orphan records', async () => {
+      // 2. Physical business account requires valid physical address
+      await it('2. Reject physical account registration when address fields are missing (HTTP 400)', async () => {
+        const missingAddrPayload = {
+          businessName: `Physical Diner ${Date.now()}`,
+          businessType: 'restaurant',
+          ownerName: 'Chef Gordon',
+          email: `diner_${Date.now()}@domain.com`,
+          password: 'SecurePassword@123',
+          isOnlineOnly: false,
+          address: {} // Missing addressLine1, city, state, postalCode
+        };
+
+        const res = await fetch(`${BASE_URL}/api/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(missingAddrPayload)
+        });
+
+        assert.strictEqual(res.status, 400);
+        const data = await res.json();
+        assert.ok(data.error.includes('address') || data.error.includes('Address'));
+      });
+
+      // 3. Physical college account creation with full valid address
+      await it('3. Create physical college account with valid address and provisioned academic form', async () => {
+        const collegePayload = {
+          businessName: `Greenfield College of Tech ${Date.now()}`,
+          businessType: 'college',
+          ownerName: 'Dr. Robert Smith',
+          email: testEmailCollege,
+          password: 'SecurePassword@123',
+          isOnlineOnly: false,
+          address: {
+            addressLine1: '120 University Avenue',
+            city: 'Metropolis',
+            state: 'NY',
+            postalCode: '10001',
+            country: 'USA'
+          }
+        };
+
+        const res = await fetch(`${BASE_URL}/api/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(collegePayload)
+        });
+
+        assert.strictEqual(res.status, 201);
+        const data = await res.json();
+        assert.ok(data.token);
+        assert.strictEqual(data.business.type, 'college');
+        assert.strictEqual(data.firstLocation.name, 'Main Campus');
+        assert.strictEqual(data.firstForm.formType, 'college');
+
+        createdBizIds.push(data.business._id || data.business.id);
+        createdUserIds.push(data.user._id || data.user.id);
+      });
+
+      // 4. Duplicate registration rejected with HTTP 409 Conflict
+      await it('4. Duplicate registration with same email is rejected with HTTP 409 Conflict without orphan records', async () => {
         const duplicatePayload = {
           businessName: `Duplicate Corp ${Date.now()}`,
           businessType: 'cafe',
-          name: 'Jane Clone',
-          email: testEmail, // same email
-          password: 'SecurePassword@123'
+          ownerName: 'Clone User',
+          email: testEmailOnline, // same email as online account
+          password: 'SecurePassword@123',
+          isOnlineOnly: true
         };
 
         const res = await fetch(`${BASE_URL}/api/auth/register`, {
@@ -275,9 +348,10 @@ async function runPhase7Tests() {
         assert.ok(data.error.includes('already exists') || data.error.includes('registered'));
       });
 
-      await it('Login with newly registered credentials returns valid session', async () => {
+      // 5. Login using newly registered credentials
+      await it('5. Login with newly registered credentials returns valid session and user profile', async () => {
         const loginPayload = {
-          email: testEmail,
+          email: testEmailOnline,
           password: 'SecurePassword@123'
         };
 
@@ -290,10 +364,11 @@ async function runPhase7Tests() {
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.ok(data.token);
-        assert.strictEqual(data.user.email, testEmail);
+        assert.strictEqual(data.user.email, testEmailOnline);
       });
 
-      await it('GET /api/forms returns initial form created during registration for the new tenant', async () => {
+      // 6. Fetch authenticated forms from real API
+      await it('6. GET /api/forms returns initial form created during registration for the new tenant', async () => {
         const res = await fetch(`${BASE_URL}/api/forms`, {
           headers: {
             'Authorization': `Bearer ${registeredToken}`
@@ -307,17 +382,19 @@ async function runPhase7Tests() {
       });
 
       // Cleanup test artifacts
-      if (createdBizId && createdUserId) {
+      for (const bId of createdBizIds) {
         try {
-          await Business.deleteOne({ _id: createdBizId });
-          await User.deleteOne({ _id: createdUserId });
-          await Location.deleteMany({ businessId: createdBizId });
-          await FeedbackForm.deleteMany({ businessId: createdBizId });
-          console.log('  ✓ Test tenant records cleaned up successfully');
-        } catch (cleanupErr) {
-          console.warn('  [Cleanup warning]:', cleanupErr.message);
-        }
+          await Business.deleteOne({ _id: bId });
+          await Location.deleteMany({ businessId: bId });
+          await FeedbackForm.deleteMany({ businessId: bId });
+        } catch (_) {}
       }
+      for (const uId of createdUserIds) {
+        try {
+          await User.deleteOne({ _id: uId });
+        } catch (_) {}
+      }
+      console.log('  ✓ Test tenant records cleaned up successfully');
     }
   }
 

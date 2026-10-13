@@ -56,8 +56,8 @@ app.use((req, res, next) => {
 
 // 2. CORS configuration with explicit origin allowlist
 const corsOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : (process.env.PUBLIC_APP_URL ? [process.env.PUBLIC_APP_URL] : ['http://localhost:3000', 'http://127.0.0.1:3000']);
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : (process.env.PUBLIC_APP_URL ? [process.env.PUBLIC_APP_URL.trim()] : ['http://localhost:3000', 'http://127.0.0.1:3000']);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -67,7 +67,7 @@ app.use(cors({
         return callback(null, true);
       }
     }
-    if (corsOrigins.includes(origin) || corsOrigins.includes('*')) {
+    if (corsOrigins.includes(origin)) {
       return callback(null, true);
     }
     return callback(new Error(`CORS blocked for origin: ${origin}`));
@@ -140,41 +140,40 @@ app.use((err, req, res, next) => {
 
 // Start Server
 if (require.main === module) {
-  (async () => {
+  const http = require('http');
+  const server = http.createServer(app);
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error('\n===============================================================');
+      console.error(` [FATAL] Port ${PORT} is already occupied by another process [PID: ${process.pid}].`);
+      console.error(` Another Node.js instance is already listening on port ${PORT}.`);
+      console.error(` Terminate the conflicting process (e.g. netstat -ano | findstr :${PORT}) or configure PORT in your environment.`);
+      console.error('===============================================================\n');
+      process.exit(1);
+    }
+    console.error('[Server Error]:', err);
+    process.exit(1);
+  });
+
+  server.listen(PORT, '0.0.0.0', async () => {
     console.log(`\n===============================================================`);
-    console.log(`[Startup] Initializing FeedbackHub Application Server`);
+    console.log(`[Startup] FeedbackHub Application Server Initialized`);
     console.log(`[Startup] Process ID: ${process.pid}`);
-    console.log(`[Startup] Configured Port: ${PORT}`);
-    console.log(`[Startup] Environment File: ${activeEnvPath || 'System environment (no .env file found)'}`);
+    console.log(`[Startup] Listening on: http://0.0.0.0:${PORT} [PID: ${process.pid}]`);
+    console.log(`[Startup] Environment: ${NODE_ENV} (.env: ${activeEnvPath || 'System environment'})`);
     console.log(`[Startup] MongoDB URI: ${process.env.MONGODB_URI ? 'Configured' : 'NOT CONFIGURED'}`);
 
-    // Attempt MongoDB connection
+    // Attempt MongoDB connection after successful port binding
     const dbConnected = await connectDB();
-    console.log(`[Startup] Database Readiness: ${dbConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    console.log(`[Startup] Database Readiness: ${dbConnected ? 'CONNECTED' : 'DISCONNECTED (STANDBY)'}`);
     console.log(`===============================================================\n`);
 
     if (!dbConnected && NODE_ENV === 'production') {
       console.error('[CRITICAL] Production server cannot start without an active MongoDB connection. Exiting.');
-      process.exit(1);
+      server.close(() => process.exit(1));
     }
-
-    const server = app.listen(PORT, () => {
-      console.log(`FeedbackHub server successfully running at http://localhost:${PORT} [PID: ${process.pid}] (ENV: ${NODE_ENV}, DB: ${isDbConnected() ? 'CONNECTED' : 'STANDBY'})`);
-    });
-
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error('\n===============================================================');
-        console.error(` [FATAL] Port ${PORT} is already occupied by another process.`);
-        console.error(` Another Node.js instance is already listening on port ${PORT}.`);
-        console.error(` Terminate the conflicting process or set PORT in backend/.env`);
-        console.error('===============================================================\n');
-        process.exit(1);
-      }
-      console.error('[Server Error]:', err);
-      process.exit(1);
-    });
-  })();
+  });
 }
 
 module.exports = app;

@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
+const http = require('http');
 const dns = require('dns');
 const dotenv = require('dotenv');
 
@@ -65,6 +66,28 @@ async function testPortAvailability(port) {
       tester.close(() => resolve({ available: true, error: null }));
     });
     tester.listen(port, '0.0.0.0');
+  });
+}
+
+// Check whether the process occupying the port is an active FeedbackHub instance
+async function checkLocalHealth(port) {
+  return new Promise((resolve) => {
+    const req = http.get(`http://127.0.0.1:${port}/api/health`, { timeout: 2000 }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed && (parsed.status === 'healthy' || parsed.environment)) {
+            resolve({ isFeedbackHub: true, pid: parsed.pid, dbStatus: parsed.database });
+            return;
+          }
+        } catch (_) {}
+        resolve({ isFeedbackHub: false });
+      });
+    });
+    req.on('error', () => resolve({ isFeedbackHub: false }));
+    req.on('timeout', () => { req.destroy(); resolve({ isFeedbackHub: false }); });
   });
 }
 
@@ -129,10 +152,15 @@ async function runDiagnostics() {
   if (portResult.available) {
     console.log(`  ✓ Port ${PORT} is AVAILABLE for binding.`);
   } else {
-    console.log(`  ✗ Port ${PORT} is OCCUPIED: ${portResult.error}`);
-    console.log(`    Remediation: Terminate the conflicting process or change PORT in backend/.env.`);
-    console.log(`    Windows lookup command: netstat -ano | findstr :${PORT}`);
-    hasErrors = true;
+    const health = await checkLocalHealth(PORT);
+    if (health.isFeedbackHub) {
+      console.log(`  ✓ Port ${PORT} is active and serving FeedbackHub (PID: ${health.pid || 'running'}, DB: ${health.dbStatus || 'connected'}).`);
+    } else {
+      console.log(`  ✗ Port ${PORT} is OCCUPIED: ${portResult.error}`);
+      console.log(`    Remediation: Terminate the conflicting process or change PORT in backend/.env.`);
+      console.log(`    Windows lookup command: netstat -ano | findstr :${PORT}`);
+      hasErrors = true;
+    }
   }
   console.log('');
 

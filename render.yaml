@@ -1,0 +1,26 @@
+# Render Blueprint Specification for FeedbackHub
+# Deploys a single unified Web Service serving both Express backend and vanilla frontend
+services:
+  - type: web
+    name: feedbackhub
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_DEMO_MODE
+        value: "false"
+      - key: PORT
+        value: "10000"
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false

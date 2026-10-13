@@ -166,8 +166,8 @@ const app = (function () {
       banner.style.cssText = 'background:#fef2f2; border:1px solid #f87171; color:#991b1b; padding:12px 16px; border-radius:8px; margin:16px auto; max-width:600px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:0.9rem;';
       banner.innerHTML = `
         <div style="flex:1;">
-          <strong>Database Connection Unavailable</strong>
-          <div style="font-size:0.8rem; color:#b91c1c; margin-top:2px;">${escapeHtml(message || 'The backend cannot connect to MongoDB. Please ensure MONGODB_URI is set correctly in backend/.env.')}</div>
+          <strong>Database Service Temporarily Unavailable</strong>
+          <div style="font-size:0.8rem; color:#b91c1c; margin-top:2px;">${escapeHtml(message || 'The database is currently unreachable or reconnecting. Please click Retry or try again shortly.')}</div>
         </div>
         <button type="button" class="btn btn-secondary btn-sm" id="btnRetryOutage" style="white-space:nowrap;">Retry 🔄</button>
       `;
@@ -221,7 +221,9 @@ const app = (function () {
       handleRoute();
     } catch (err) {
       const isOutage = err.status === 503 || (err.message && (
-        err.message.includes('Database connection unavailable') ||
+        err.message.includes('Database') ||
+        err.message.includes('unavailable') ||
+        err.message.includes('reconnecting') ||
         err.message.includes('Failed to fetch') ||
         err.message.includes('NetworkError')
       ));

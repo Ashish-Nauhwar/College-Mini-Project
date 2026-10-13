@@ -4,6 +4,14 @@ const { comparePassword, hashPassword } = require('../utils/crypto');
 const db = require('../db');
 const { generateToken, requireAuth, requireRole } = require('../middleware/auth');
 
+// Helper to return accurate, user-friendly database unavailable messages
+function getDbUnavailableError() {
+  const isUriConfigured = Boolean(process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('<username>'));
+  return isUriConfigured
+    ? 'Database service temporarily unavailable. The database is currently reconnecting or unreachable. Please try again shortly.'
+    : 'Database connection unavailable. Please ensure MONGODB_URI is configured in your environment.';
+}
+
 // GET /api/auth/demo-status (Public endpoint reporting whether demo accounts are enabled)
 router.get('/demo-status', (req, res) => {
   const isDemoEnabled = process.env.ENABLE_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
@@ -14,7 +22,7 @@ router.get('/demo-status', (req, res) => {
 router.post('/login', async (req, res) => {
   if (!db.isDbConnected()) {
     return res.status(503).json({
-      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.'
+      error: getDbUnavailableError()
     });
   }
 
@@ -81,7 +89,7 @@ router.post('/switch-demo', async (req, res) => {
 
   if (!db.isDbConnected()) {
     return res.status(503).json({
-      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.'
+      error: getDbUnavailableError()
     });
   }
 
@@ -134,7 +142,7 @@ router.post('/switch-demo', async (req, res) => {
 router.post('/register', async (req, res) => {
   if (!db.isDbConnected()) {
     return res.status(503).json({
-      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.'
+      error: getDbUnavailableError()
     });
   }
 
@@ -148,6 +156,7 @@ router.post('/register', async (req, res) => {
       businessName,
       businessType,
       ownerName,
+      name,
       email,
       password,
       category,
@@ -156,11 +165,13 @@ router.post('/register', async (req, res) => {
       address
     } = req.body;
 
+    const effectiveOwnerName = ownerName || name;
+
     // Validate required fields
     if (!businessName || !businessName.trim()) {
       return res.status(400).json({ error: 'Business name is required' });
     }
-    if (!ownerName || !ownerName.trim()) {
+    if (!effectiveOwnerName || !effectiveOwnerName.trim()) {
       return res.status(400).json({ error: 'Owner name is required' });
     }
     if (!email || !email.trim()) {
@@ -172,16 +183,16 @@ router.post('/register', async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check duplicate email against existing User
+    // Check duplicate email against existing User (HTTP 409 Conflict)
     const existingUser = await db.findUserByEmail(normalizedEmail);
     if (existingUser) {
-      return res.status(400).json({ error: 'An account with this email address already exists' });
+      return res.status(409).json({ error: 'An account with this email address already exists' });
     }
 
-    // Check duplicate email against existing Business
+    // Check duplicate email against existing Business (HTTP 409 Conflict)
     const existingBiz = await db.findBusinessByEmail(normalizedEmail);
     if (existingBiz) {
-      return res.status(400).json({ error: 'A business registered with this email address already exists' });
+      return res.status(409).json({ error: 'A business registered with this email address already exists' });
     }
 
     // Validate physical address for physical businesses
@@ -249,7 +260,7 @@ router.post('/register', async (req, res) => {
 
     // 2. Create Owner User
     createdUser = await db.createUser({
-      name: ownerName.trim(),
+      name: effectiveOwnerName.trim(),
       email: normalizedEmail,
       password: hashPassword(password),
       role: 'owner',
@@ -268,7 +279,7 @@ router.post('/register', async (req, res) => {
       code: 'HQ-01',
       address: locationAddress,
       phone: phone ? phone.trim() : '',
-      manager: ownerName.trim()
+      manager: effectiveOwnerName.trim()
     });
 
     // 4. Create Default Form based on business type
@@ -393,7 +404,7 @@ router.post('/register', async (req, res) => {
 
     await db.logAudit(
       'Business Registered',
-      ownerName.trim(),
+      effectiveOwnerName.trim(),
       `Registered ${businessName} (${bType}) with initial location and form`,
       bizId,
       req.ip
@@ -446,7 +457,7 @@ router.post('/register', async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   if (!db.isDbConnected()) {
     return res.status(503).json({
-      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.',
+      error: getDbUnavailableError(),
       code: 'DB_UNAVAILABLE'
     });
   }

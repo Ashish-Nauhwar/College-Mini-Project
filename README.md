@@ -197,11 +197,18 @@ npm start
 
 ## 🧪 Automated Testing Architecture
 
+### Diagnostics Command
+Before starting the server or running integration tests, run the built-in system diagnostics:
+```bash
+npm run diagnose
+```
+Reports environment file detection, port 3000 availability (preventing `EADDRINUSE` conflicts), masked MongoDB Atlas connection test, and static asset integrity.
+
 ### Run All Automated Suites
 ```bash
 npm test
 ```
-Executes all automated suites with full summary reporting:
+Executes all 9 automated suites with full summary reporting:
 ```
 ======================================================
               AUTOMATED VERIFICATION SUMMARY          
@@ -213,24 +220,72 @@ Executes all automated suites with full summary reporting:
 5. Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]: PASS ✓
 6. Phase 4 Data Safety & DB Protection [Safety Unit Tests]: PASS ✓
 7. Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]: PASS ✓
-8. Real MongoDB Atlas Integration [Live Database]: SKIPPED (no TEST_MONGODB_URI configured)
+8. Phase 7 Signup & Routing Resilience [App & DB Check]: PASS ✓
+9. Real MongoDB Atlas Integration [Live Database]: SKIPPED (no TEST_MONGODB_URI configured)
 ======================================================
 ```
 
 ### Individual Test Suites
 ```bash
-# 1. Master Suite (All 8 Suites)
+# Master Suite (All 9 Suites)
 npm test
 
-# 2. Phase 5 RBAC, Lifecycle & Production Safety
+# Phase 7 Signup, Routing & Blank-Screen Resilience
+npm run test:phase7
+
+# Phase 5 RBAC, Lifecycle & Production Safety
 npm run test:phase5
 
-# 3. Security, RBAC & Multi-Tenant Isolation
+# Security, Auth & RBAC Isolation
 npm run test:security
 
-# 4. Multi-Device Responsive UI Verification (320px - 1440px)
+# Real MongoDB Atlas Integration (Requires TEST_MONGODB_URI)
+npm run test:integration
+
+# Multi-Device Responsive UI Verification (320px - 1440px)
 npm run test:responsive
 ```
+
+---
+
+## 🚀 Deployment Guide (Render)
+
+FeedbackHub is architected to deploy seamlessly as a single unified **Render Web Service** that serves both the Express backend API and the responsive vanilla frontend on the same origin.
+
+### 1. Blueprint Deployment (`render.yaml`)
+A verified [`render.yaml`](file:///c:/Users/itsya/OneDrive/Desktop/vide%20coding/Feedback%20Project/render.yaml) blueprint is included in the project root. To deploy via Blueprint:
+1. Push your repository to GitHub.
+2. In the [Render Dashboard](https://dashboard.render.com), click **New +** > **Blueprint**.
+3. Select your repository. Render will automatically configure the service using `render.yaml`.
+
+### 2. Manual Service Configuration
+Alternatively, create a new **Web Service** manually:
+* **Environment**: `Node`
+* **Build Command**: `npm install`
+* **Start Command**: `npm start`
+* **Health Check Path**: `/api/health`
+* **Auto-Deploy**: `Yes`
+
+### 3. Required Production Environment Variables
+Configure the following environment variables in your Render service settings:
+
+| Variable | Description | Example / Recommended Setting |
+| :--- | :--- | :--- |
+| `NODE_ENV` | Enforces production security guards | `production` |
+| `PORT` | Set automatically by Render runtime | `10000` (Render default) |
+| `MONGODB_URI` | Production MongoDB Atlas connection string | `mongodb+srv://<user>:<password>@cluster.mongodb.net/feedbackhub?retryWrites=true&w=majority` |
+| `JWT_SECRET` | Cryptographically random secret ($\ge 32$ chars) | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `PUBLIC_APP_URL` | Deployed HTTPS URL of your application | `https://feedbackhub.onrender.com` |
+| `ALLOWED_ORIGINS` | Permitted CORS origins (matches public URL) | `https://feedbackhub.onrender.com` |
+| `ENABLE_DEMO_MODE` | Strictly disables 1-click demo role switcher | `false` |
+
+> [!WARNING]
+> * Never run `npm run seed` in production. Seeding is strictly blocked when `NODE_ENV=production`.
+> * Provision your initial super-admin using the CLI:
+>   ```bash
+>   npm run bootstrap:superadmin -- admin@yourdomain.com StrongAdminPass@2026 "Site Admin"
+>   ```
+> * The server automatically binds to `0.0.0.0` on Render's assigned `PORT` and verifies port availability before attempting database connections to eliminate `EADDRINUSE` collision masking.
 
 ---
 

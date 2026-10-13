@@ -108,40 +108,58 @@ async function runRealMongoIntegrationTest() {
     });
     console.log(`  ✓ Express test server listening at ${BASE_URL}`);
 
-    // Step 3: Create isolated test business & owner user in live MongoDB
-    console.log('[Step 3] Provisioning isolated test business & owner in live database...');
+    // Step 3: Register isolated test business & owner via real API (POST /api/auth/register)
+    console.log('[Step 3] Registering isolated test college & owner via real API (POST /api/auth/register)...');
     const testTimestamp = Date.now();
-    const testBiz = await Business.create({
-      name: `Apex Live Test University ${testTimestamp}`,
-      type: 'college',
-      email: `test-college-${testTimestamp}@apextest.edu`,
-      active: true,
-      academicConfig: {
-        departments: ['Computer Science (CSE)', 'Mechanical Engineering'],
-        courses: ['B.Tech', 'M.Tech'],
-        academicYears: ['2026-2027'],
-        faculty: [{ name: 'Dr. Atlas Test', department: 'Computer Science (CSE)' }],
-        subjects: [{ name: 'Cloud Computing', code: 'CS801', department: 'Computer Science (CSE)' }]
-      }
-    });
-    created.businesses.push(testBiz._id);
-
-    const pwdHash = await hashPassword('LiveTestPassword@123');
-    const ownerUser = await User.create({
-      name: 'Test Dean',
+    const registerPayload = {
+      businessName: `Apex Live Test University ${testTimestamp}`,
+      businessType: 'college',
+      ownerName: 'Test Dean',
       email: `dean-${testTimestamp}@apextest.edu`,
-      password: pwdHash,
-      role: 'owner',
-      businessId: testBiz._id
-    });
-    created.users.push(ownerUser._id);
-    console.log('  ✓ Test business and owner created in live database');
+      password: 'LiveTestPassword@123',
+      isOnlineOnly: false,
+      address: {
+        addressLine1: 'Campus Drive 101',
+        city: 'Academic City',
+        state: 'State',
+        postalCode: '110001',
+        country: 'India'
+      }
+    };
 
-    // Step 4: Generate JWT token for owner
-    console.log('[Step 4] Generating JWT authentication token for owner...');
-    const ownerToken = generateToken(ownerUser);
-    assert.ok(ownerToken, 'Owner token must be generated');
-    console.log('  ✓ Generated valid JWT owner bearer token');
+    const regRes = await fetch(`${BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(registerPayload)
+    });
+
+    assert.strictEqual(regRes.status, 201, 'Registration via real API must succeed with 201 Created');
+    const regData = await regRes.json();
+    assert.ok(regData.token, 'Registration must return valid JWT token');
+
+    const testBiz = regData.business;
+    const ownerUser = regData.user;
+    const ownerToken = regData.token;
+
+    created.businesses.push(testBiz._id);
+    created.users.push(ownerUser.id || ownerUser._id);
+
+    // Update business with academic configuration for college workflow
+    await Business.updateOne(
+      { _id: testBiz._id },
+      {
+        $set: {
+          academicConfig: {
+            departments: ['Computer Science (CSE)', 'Mechanical Engineering'],
+            courses: ['B.Tech', 'M.Tech'],
+            academicYears: ['2026-2027'],
+            faculty: [{ name: 'Dr. Atlas Test', department: 'Computer Science (CSE)' }],
+            subjects: [{ name: 'Cloud Computing', code: 'CS801', department: 'Computer Science (CSE)' }]
+          }
+        }
+      }
+    );
+    console.log('  ✓ Test college and owner registered via real API and JWT bearer token issued');
 
     // Step 5: Create draft college feedback form via POST /api/forms
     console.log('[Step 5] Creating draft college feedback form via POST /api/forms...');
