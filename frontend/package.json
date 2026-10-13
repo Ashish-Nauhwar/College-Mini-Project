@@ -1,0 +1,13 @@
+{
+  "name": "feedbackhub-frontend",
+  "version": "1.0.0",
+  "description": "Mobile-First Responsive Frontend for FeedbackHub",
+  "main": "index.html",
+  "scripts": {
+    "start": "node ../backend/server.js",
+    "test": "node ../backend/tests/cdp-responsive-test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

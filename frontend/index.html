@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="description" content="FeedbackHub - Mobile-first Customer Feedback & Experience Management Platform">
+  <title>FeedbackHub - Experience & Feedback Management</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Chart.js for responsive analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Offline self-contained zero-dependency QR code generator -->
+  <script src="/js/qr.js"></script>
+</head>
+<body>
+
+  <!-- Mobile Drawer Backdrop Overlay -->
+  <div class="mobile-drawer-backdrop" id="drawerBackdrop" aria-hidden="true"></div>
+
+  <!-- Mobile Slide-Out Navigation Drawer -->
+  <aside class="mobile-drawer" id="mobileDrawer" aria-label="Mobile Navigation Drawer">
+    <div class="drawer-header">
+      <a href="#/dashboard" class="brand-logo" onclick="app.closeMobileDrawer()">
+        <span class="brand-icon">⚡</span>
+        <span>FeedbackHub</span>
+      </a>
+      <button type="button" class="drawer-close-btn" id="drawerCloseBtn" aria-label="Close navigation menu">✕</button>
+    </div>
+
+    <div style="padding: 12px 16px; border-bottom: 1px solid var(--neutral-200); background-color: var(--neutral-50);">
+      <div style="font-size: 0.8rem; font-weight: 600; color: var(--neutral-500); text-transform: uppercase;">Current Business</div>
+      <div id="drawerBizName" style="font-weight: 700; color: var(--neutral-900); font-size: 0.95rem;">Apex Specialty Coffee</div>
+    </div>
+
+    <ul class="nav-menu" id="mobileNavMenu">
+      <li><a href="#/dashboard" class="nav-link active" data-view="dashboard"><span class="icon">📊</span> Dashboard</a></li>
+      <li><a href="#/inbox" class="nav-link" data-view="inbox"><span class="icon">📥</span> Feedback Inbox</a></li>
+      <li><a href="#/builder" class="nav-link" data-view="builder"><span class="icon">🛠️</span> Form Builder</a></li>
+      <li><a href="#/analytics" class="nav-link" data-view="analytics"><span class="icon">📈</span> Analytics</a></li>
+      <li><a href="#/qr" class="nav-link" data-view="qr"><span class="icon">📱</span> QR Codes</a></li>
+      <li><a href="#/locations" class="nav-link" data-view="locations"><span class="icon">📍</span> Locations</a></li>
+      <li><a href="#/settings" class="nav-link" data-view="settings"><span class="icon">⚙️</span> Settings</a></li>
+      <li id="mobileAdminNavItem" class="hidden"><a href="#/admin" class="nav-link" data-view="admin"><span class="icon">🛡️</span> Super Admin</a></li>
+    </ul>
+
+    <div style="margin-top: auto; padding: 16px; border-top: 1px solid var(--border-color); background-color: var(--neutral-50);">
+      <div style="font-size: 0.75rem; font-weight: 600; color: var(--neutral-500); margin-bottom: 8px;">QUICK DEMO ROLES</div>
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('owner')" style="justify-content: flex-start;">👩‍💼 Sarah (Owner)</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('manager')" style="justify-content: flex-start;">👨‍💼 Marcus (Manager)</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('superadmin')" style="justify-content: flex-start;">🛡️ Super Admin</button>
+      </div>
+      <button type="button" class="btn btn-secondary btn-block btn-sm" onclick="app.logout()">Log Out</button>
+    </div>
+  </aside>
+
+  <!-- Application Shell Wrapper -->
+  <div class="app-wrapper">
+    <!-- Desktop Sidebar (>= 1024px) -->
+    <aside class="app-sidebar" aria-label="Desktop Navigation Sidebar">
+      <div style="padding: 20px 16px; border-bottom: 1px solid var(--border-color);">
+        <a href="#/dashboard" class="brand-logo">
+          <span class="brand-icon">⚡</span>
+          <span>FeedbackHub</span>
+        </a>
+      </div>
+
+      <div style="padding: 12px 16px; border-bottom: 1px solid var(--neutral-100); background-color: var(--neutral-50);">
+        <div style="font-size: 0.75rem; font-weight: 600; color: var(--neutral-500); text-transform: uppercase;">Active Workspace</div>
+        <div id="desktopBizName" style="font-weight: 700; color: var(--neutral-900); font-size: 0.95rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+          Apex Specialty Coffee
+        </div>
+      </div>
+
+      <ul class="nav-menu" id="desktopNavMenu">
+        <li><a href="#/dashboard" class="nav-link active" data-view="dashboard"><span class="icon">📊</span> Dashboard</a></li>
+        <li><a href="#/inbox" class="nav-link" data-view="inbox"><span class="icon">📥</span> Feedback Inbox</a></li>
+        <li><a href="#/builder" class="nav-link" data-view="builder"><span class="icon">🛠️</span> Form Builder</a></li>
+        <li><a href="#/analytics" class="nav-link" data-view="analytics"><span class="icon">📈</span> Analytics</a></li>
+        <li><a href="#/qr" class="nav-link" data-view="qr"><span class="icon">📱</span> QR Codes</a></li>
+        <li><a href="#/locations" class="nav-link" data-view="locations"><span class="icon">📍</span> Locations</a></li>
+        <li><a href="#/settings" class="nav-link" data-view="settings"><span class="icon">⚙️</span> Settings</a></li>
+        <li id="desktopAdminNavItem" class="hidden"><a href="#/admin" class="nav-link" data-view="admin"><span class="icon">🛡️</span> Super Admin</a></li>
+      </ul>
+
+      <div style="margin-top: auto; padding: 16px; border-top: 1px solid var(--border-color); background-color: var(--neutral-50);">
+        <div style="font-size: 0.75rem; font-weight: 600; color: var(--neutral-500); margin-bottom: 8px;">SWITCH DEMO USER</div>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('owner')" style="justify-content: flex-start;">👩‍💼 Sarah (Owner)</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('manager')" style="justify-content: flex-start;">👨‍💼 Marcus (Manager)</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('superadmin')" style="justify-content: flex-start;">🛡️ Super Admin</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-block btn-sm" onclick="app.logout()">Log Out</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="app-main">
+      <!-- Top Navigation Header -->
+      <header class="top-header" id="topHeader">
+        <div class="header-left">
+          <!-- Hamburger button for mobile screens -->
+          <button type="button" class="hamburger-btn" id="hamburgerBtn" aria-label="Open mobile navigation menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <h1 class="h3" id="pageTitle" style="margin: 0; font-size: clamp(1.1rem, 2.5vw, 1.35rem);">Dashboard</h1>
+        </div>
+
+        <div class="header-right">
+          <!-- Quick Public Form Preview Link -->
+          <a id="headerPublicFormLink" href="/feedback/apex-downtown" target="_blank" class="btn btn-secondary btn-sm" style="display: none;">
+            <span>👁️</span> <span style="display: none; @media(min-width: 600px) { display: inline; }">Live Form</span>
+          </a>
+
+          <!-- User Profile Chip -->
+          <div class="user-profile-badge" id="userProfileBadge" onclick="app.openProfileModal()" title="View profile & demo accounts">
+            <span class="user-avatar" id="userAvatar">👩‍💼</span>
+            <span id="userName" style="font-size: 0.85rem; font-weight: 600; display: none; @media(min-width: 640px){display: inline;}">Sarah</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- View Containers -->
+      <main class="page-content" id="mainContent">
+
+        <!-- ==========================================
+             VIEW: LANDING (for logged-out visitors)
+             ========================================== -->
+        <section id="view-landing" class="hidden">
+          <div class="container">
+            <div class="landing-hero">
+              <span class="hero-badge">🚀 Mobile-First Customer Experience Platform</span>
+              <h1>Capture Instant Feedback Where It Matters Most</h1>
+              <p class="text-muted" style="max-width: 640px; font-size: clamp(1rem, 2vw, 1.15rem);">
+                Turn physical customer visits into actionable loyalty. Generate instant QR codes for tables, counters, and receipts with zero app downloads.
+              </p>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 400px;">
+                <button type="button" class="btn btn-primary btn-block" onclick="app.switchDemo('owner')">
+                  Open Demo Dashboard
+                </button>
+                <a href="#/login" class="btn btn-secondary btn-block">
+                  Sign In to Account
+                </a>
+                <a href="/feedback/apex-downtown" target="_blank" class="btn btn-secondary btn-block">
+                  Test Public Mobile Form 📱
+                </a>
+              </div>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="features-grid">
+              <div class="card">
+                <div style="font-size: 2rem; margin-bottom: 12px;">📱</div>
+                <h3 class="h3" style="margin-bottom: 8px;">30-Second Mobile Forms</h3>
+                <p class="text-muted text-sm">Customers scan a QR code with their phone camera and submit feedback in seconds. Zero friction, zero downloads.</p>
+              </div>
+              <div class="card">
+                <div style="font-size: 2rem; margin-bottom: 12px;">⚡</div>
+                <h3 class="h3" style="margin-bottom: 8px;">Instant Negative Alerting</h3>
+                <p class="text-muted text-sm">1-star and 2-star complaints immediately trigger priority flags and internal routing so you can recover customers before they leave.</p>
+              </div>
+              <div class="card">
+                <div style="font-size: 2rem; margin-bottom: 12px;">⭐</div>
+                <h3 class="h3" style="margin-bottom: 8px;">Google Review Boost</h3>
+                <p class="text-muted text-sm">Delighted customers rating 4 or 5 stars are seamlessly prompted to mirror their review on your Google Business profile.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: LOGIN
+             ========================================== -->
+        <section id="view-login" class="hidden">
+          <div style="max-width: 420px; margin: 30px auto;" class="card">
+            <h2 class="h2 text-center" style="margin-bottom: 6px;">Sign In</h2>
+            <p class="text-muted text-sm text-center" style="margin-bottom: 20px;">
+              Access your business feedback hub
+            </p>
+
+            <!-- 1-Click Demo Login Shortcuts -->
+            <div style="background-color: var(--primary-light); padding: 12px; border-radius: var(--radius-md); margin-bottom: 20px;">
+              <p style="font-size: 0.75rem; font-weight: 700; color: var(--primary-text); margin-bottom: 8px; text-transform: uppercase;">
+                Fast 1-Click Demo Sign In:
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <button type="button" class="btn btn-primary btn-sm btn-block" onclick="app.switchDemo('owner')">
+                  👩‍💼 Business Owner (Sarah)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm btn-block" onclick="app.switchDemo('manager')">
+                  👨‍💼 Location Manager (Marcus)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm btn-block" onclick="app.switchDemo('superadmin')">
+                  🛡️ Super Admin (Full Control)
+                </button>
+              </div>
+            </div>
+
+            <form id="loginForm" novalidate>
+              <div class="form-group">
+                <label class="form-label" for="loginEmail">Email Address</label>
+                <input type="email" id="loginEmail" class="form-input" required autocomplete="email" placeholder="sarah@apexcafe.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" class="form-input" required autocomplete="current-password" placeholder="Password@123">
+              </div>
+              <div id="loginError" class="form-error hidden"></div>
+              <button type="submit" class="btn btn-primary btn-block mt-4">Sign In</button>
+            </form>
+
+            <p class="text-center text-sm text-muted mt-4">
+              Don't have an account? <a href="#/register" style="color: var(--primary); font-weight: 600;">Register here</a>
+            </p>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: REGISTER
+             ========================================== -->
+        <section id="view-register" class="hidden">
+          <div style="max-width: 480px; margin: 30px auto;" class="card">
+            <h2 class="h2 text-center" style="margin-bottom: 6px;">Register Business</h2>
+            <p class="text-muted text-sm text-center" style="margin-bottom: 20px;">
+              Get started with FeedbackHub in under 2 minutes
+            </p>
+
+            <form id="registerForm" novalidate>
+              <div class="form-group">
+                <label class="form-label" for="regBizName">Business / Brand Name <span class="required">*</span></label>
+                <input type="text" id="regBizName" class="form-input" required placeholder="e.g. Blue Lagoon Bistro">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="regCategory">Industry / Category</label>
+                <select id="regCategory" class="form-select">
+                  <option value="Cafe & Restaurant">Cafe &amp; Restaurant</option>
+                  <option value="Retail & Boutique">Retail &amp; Boutique</option>
+                  <option value="Healthcare & Clinic">Healthcare &amp; Clinic</option>
+                  <option value="Hospitality & Hotel">Hospitality &amp; Hotel</option>
+                  <option value="Fitness & Gym">Fitness &amp; Gym</option>
+                  <option value="Services & Other">Services &amp; Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="regOwnerName">Your Name <span class="required">*</span></label>
+                <input type="text" id="regOwnerName" class="form-input" required placeholder="e.g. Jordan Smith">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="regEmail">Email Address <span class="required">*</span></label>
+                <input type="email" id="regEmail" class="form-input" required placeholder="jordan@bluelagoon.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="regPassword">Password <span class="required">*</span></label>
+                <input type="password" id="regPassword" class="form-input" required placeholder="Minimum 6 characters">
+              </div>
+              <div id="regError" class="form-error hidden"></div>
+              <button type="submit" class="btn btn-primary btn-block mt-4">Create Account &amp; Start</button>
+            </form>
+
+            <p class="text-center text-sm text-muted mt-4">
+              Already have an account? <a href="#/login" style="color: var(--primary); font-weight: 600;">Sign in here</a>
+            </p>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: DASHBOARD
+             ========================================== -->
+        <section id="view-dashboard" class="hidden">
+          <!-- Filter Toolbar (Location + Time Period) -->
+          <div class="filter-toolbar">
+            <div class="filter-group">
+              <label class="form-label" for="dashLocationSelect" style="margin: 0; font-size: 0.85rem;">Location:</label>
+              <select id="dashLocationSelect" class="form-select" style="min-width: 170px; min-height: 38px; padding: 6px 12px;" onchange="app.refreshDashboard()">
+                <option value="all">All Locations</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label class="form-label" for="dashTimeSelect" style="margin: 0; font-size: 0.85rem;">Time Range:</label>
+              <select id="dashTimeSelect" class="form-select" style="min-width: 140px; min-height: 38px; padding: 6px 12px;" onchange="app.refreshDashboard()">
+                <option value="all">All Time</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="today">Today</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Summary Metric Cards (1 col mobile, 2 col tablet, 4 col desktop) -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-label">Total Feedbacks</span>
+                <span class="stat-icon" style="background-color: var(--primary-light); color: var(--primary);">💬</span>
+              </div>
+              <div class="stat-value" id="statTotalResponses">0</div>
+              <div class="stat-subtext">Across all active QR points</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-label">Average Rating</span>
+                <span class="stat-icon" style="background-color: var(--warning-light); color: var(--warning);">⭐</span>
+              </div>
+              <div class="stat-value" id="statAvgRating">0.0</div>
+              <div class="stat-subtext" id="statRatingStars">★★★★★</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-label">Net Promoter (NPS)</span>
+                <span class="stat-icon" style="background-color: var(--success-light); color: var(--success);">📈</span>
+              </div>
+              <div class="stat-value" id="statNpsScore">+0</div>
+              <div class="stat-subtext">Customer advocacy score</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-label">Pending Complaints</span>
+                <span class="stat-icon" style="background-color: var(--danger-light); color: var(--danger);">⚠️</span>
+              </div>
+              <div class="stat-value" id="statPendingComplaints">0</div>
+              <div class="stat-subtext" id="statResolutionRate">100% Resolved</div>
+            </div>
+          </div>
+
+          <!-- Responsive Charts Grid -->
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3 class="h3" style="font-size: 1.1rem;">Response Volume &amp; Ratings</h3>
+                <span class="badge badge-positive">7-Day Trend</span>
+              </div>
+              <div class="chart-container">
+                <canvas id="trendChartCanvas"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3 class="h3" style="font-size: 1.1rem;">Sentiment Distribution</h3>
+                <span class="badge badge-low">Customer Mood</span>
+              </div>
+              <div class="chart-container">
+                <canvas id="sentimentChartCanvas"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Responses List -->
+          <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+              <h3 class="h3" style="font-size: 1.15rem;">Recent Feedback Responses</h3>
+              <a href="#/inbox" class="btn btn-secondary btn-sm">View Full Inbox →</a>
+            </div>
+            <div id="dashRecentFeedbacks" class="mobile-cards-list">
+              <!-- Injected by app.js -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: INBOX (Feedback Management)
+             ========================================== -->
+        <section id="view-inbox" class="hidden">
+          <!-- Mobile-Friendly Filter Toolbar -->
+          <div class="filter-toolbar">
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="inboxSearchInput" class="form-input" placeholder="Search comments or customer..." oninput="app.filterInbox()">
+            </div>
+
+            <div class="filter-group">
+              <select id="inboxRatingFilter" class="form-select" style="min-width: 120px; min-height: 38px; padding: 6px 10px;" onchange="app.filterInbox()">
+                <option value="all">All Stars</option>
+                <option value="5">5 Stars</option>
+                <option value="4">4 Stars</option>
+                <option value="3">3 Stars</option>
+                <option value="2">2 Stars</option>
+                <option value="1">1 Star</option>
+              </select>
+
+              <select id="inboxStatusFilter" class="form-select" style="min-width: 120px; min-height: 38px; padding: 6px 10px;" onchange="app.filterInbox()">
+                <option value="all">All Statuses</option>
+                <option value="new">New</option>
+                <option value="in_review">In Review</option>
+                <option value="resolved">Resolved</option>
+              </select>
+
+              <select id="inboxPriorityFilter" class="form-select" style="min-width: 120px; min-height: 38px; padding: 6px 10px;" onchange="app.filterInbox()">
+                <option value="all">All Priorities</option>
+                <option value="critical">Critical</option>
+                <option value="urgent">Urgent</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+
+              <select id="inboxLocationFilter" class="form-select" style="min-width: 140px; min-height: 38px; padding: 6px 10px;" onchange="app.filterInbox()">
+                <option value="all">All Locations</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Total count indicator -->
+          <div style="font-size: 0.85rem; color: var(--neutral-500); margin-bottom: 12px; font-weight: 500;" id="inboxCountText">
+            Showing 0 responses
+          </div>
+
+          <!-- Desktop Table (visible >= 900px) -->
+          <div class="desktop-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Rating</th>
+                  <th>Customer</th>
+                  <th>Feedback Comments</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Location</th>
+                  <th>Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="inboxTableBody">
+                <!-- Injected by app.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile Cards List (visible < 900px) -->
+          <div class="mobile-cards-list" id="inboxCardsList">
+            <!-- Injected by app.js -->
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: FORM BUILDER
+             ========================================== -->
+        <section id="view-builder" class="hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <label class="form-label" for="builderFormSelector" style="margin: 0;">Select Form:</label>
+              <select id="builderFormSelector" class="form-select" style="min-width: 220px; min-height: 38px;" onchange="app.loadBuilderForm(this.value)">
+                <!-- Injected by app.js -->
+              </select>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.previewCurrentForm()">
+                👁️ Preview Form
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.showQrForCurrentForm()">
+                📱 View QR
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="app.saveCurrentForm()">
+                💾 Save Changes
+              </button>
+            </div>
+          </div>
+
+          <!-- Form Settings Card -->
+          <div class="card" style="margin-bottom: 18px;">
+            <h3 class="h3" style="margin-bottom: 14px;">Form General Settings</h3>
+            <div style="display: grid; grid-template-columns: 1fr; gap: 14px;">
+              <div class="form-group">
+                <label class="form-label" for="builderTitle">Form Title <span class="required">*</span></label>
+                <input type="text" id="builderTitle" class="form-input" placeholder="e.g. Flagship Customer Experience">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="builderDesc">Welcome / Introduction Message</label>
+                <textarea id="builderDesc" class="form-textarea" rows="2" placeholder="Help us craft your perfect visit..."></textarea>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label" for="builderLocation">Assigned Location</label>
+                  <select id="builderLocation" class="form-select">
+                    <!-- Injected by app.js -->
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="builderStatus">Accepting Responses (Status)</label>
+                  <select id="builderStatus" class="form-select">
+                    <option value="published">🟢 Published (Active &amp; Accepting Responses)</option>
+                    <option value="paused">⏸️ Paused (Temporarily Closed)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="builderGoogleUrl">Google Review Link (for 4 &amp; 5-star redirection)</label>
+                <input type="url" id="builderGoogleUrl" class="form-input" placeholder="https://g.page/r/your-business/review">
+              </div>
+            </div>
+          </div>
+
+          <!-- Form Questions List -->
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+              <h3 class="h3">Questions &amp; Controls</h3>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.addBuilderQuestion()">
+                ➕ Add Question
+              </button>
+            </div>
+
+            <div id="builderQuestionsContainer">
+              <!-- Dynamically populated question cards -->
+            </div>
+
+            <div style="margin-top: 16px;">
+              <button type="button" class="btn btn-primary btn-block" onclick="app.saveCurrentForm()" style="min-height: 48px;">
+                💾 Save Form Configuration
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: ANALYTICS
+             ========================================== -->
+        <section id="view-analytics" class="hidden">
+          <div class="filter-toolbar">
+            <div class="filter-group">
+              <label class="form-label" for="analyticsTimeSelect" style="margin: 0;">Period:</label>
+              <select id="analyticsTimeSelect" class="form-select" style="min-width: 140px;" onchange="app.refreshAnalytics()">
+                <option value="all">All Time</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="today">Today</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label class="form-label" for="analyticsLocationSelect" style="margin: 0;">Location:</label>
+              <select id="analyticsLocationSelect" class="form-select" style="min-width: 160px;" onchange="app.refreshAnalytics()">
+                <option value="all">All Locations</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Detailed Charts -->
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3 class="h3" style="font-size: 1.1rem;">Star Rating Breakdown (1 to 5)</h3>
+              </div>
+              <div class="chart-container">
+                <canvas id="ratingDistChartCanvas"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <h3 class="h3" style="font-size: 1.1rem;">Location Performance Comparison</h3>
+              </div>
+              <div id="analyticsLocationList" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 280px;">
+                <!-- Populated by app.js -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: QR CODES
+             ========================================== -->
+        <section id="view-qr" class="hidden">
+          <div class="card qr-card-container" style="max-width: 560px; margin: 0 auto;">
+            <h2 class="h2">Customer QR Code Generator</h2>
+            <p class="text-muted text-sm">
+              Customers scan this code with their smartphone camera to open your instant mobile feedback form.
+            </p>
+
+            <div class="form-group" style="max-width: 360px; width: 100%;">
+              <label class="form-label" for="qrFormSelect">Select Target Feedback Form:</label>
+              <select id="qrFormSelect" class="form-select" onchange="app.renderSelectedQr(this.value)">
+                <!-- Injected by app.js -->
+              </select>
+            </div>
+
+            <!-- Crisp High-Res QR Wrapper -->
+            <div class="qr-image-wrapper">
+              <canvas id="qrCodeCanvas"></canvas>
+            </div>
+
+            <!-- Form Direct URL Box -->
+            <div style="background-color: var(--neutral-100); padding: 10px 14px; border-radius: var(--radius-md); width: 100%; word-break: break-all; font-family: monospace; font-size: 0.85rem; color: var(--neutral-700);" id="qrTargetUrlText">
+              Loading URL...
+            </div>
+
+            <!-- Action Buttons (Responsive & Touch Friendly) -->
+            <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+              <button type="button" class="btn btn-primary btn-block" onclick="app.copyQrLink()">
+                📋 Copy Public Link
+              </button>
+              <button type="button" class="btn btn-secondary btn-block" onclick="app.downloadQrPng()">
+                ⬇️ Download Print-Ready PNG
+              </button>
+              <a id="qrOpenFormLink" href="#" target="_blank" class="btn btn-secondary btn-block">
+                📱 Open Live Form in Mobile Browser
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: LOCATIONS
+             ========================================== -->
+        <section id="view-locations" class="hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+            <h2 class="h2">Store &amp; Branch Locations</h2>
+            <button type="button" class="btn btn-primary btn-sm" onclick="app.openAddLocationModal()">
+              ➕ Add New Location
+            </button>
+          </div>
+
+          <div id="locationsContainer" style="display: grid; grid-template-columns: 1fr; gap: 16px;">
+            <!-- Populated by app.js -->
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: SETTINGS
+             ========================================== -->
+        <section id="view-settings" class="hidden">
+          <div class="card" style="max-width: 600px; margin: 0 auto;">
+            <h2 class="h2" style="margin-bottom: 16px;">Business Profile Settings</h2>
+            <form id="settingsForm" onsubmit="app.saveSettings(event)">
+              <div class="form-group">
+                <label class="form-label" for="setBizName">Business Name</label>
+                <input type="text" id="setBizName" class="form-input" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="setCategory">Category</label>
+                <input type="text" id="setCategory" class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="setEmail">Contact Email</label>
+                <input type="email" id="setEmail" class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="setPhone">Phone</label>
+                <input type="tel" id="setPhone" class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="setAddress">Headquarters Address</label>
+                <textarea id="setAddress" class="form-textarea" rows="2"></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block mt-4">Save Profile Updates</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             VIEW: SUPER ADMIN
+             ========================================== -->
+        <section id="view-admin" class="hidden">
+          <h2 class="h2" style="margin-bottom: 16px;">Super Admin Control Center</h2>
+
+          <!-- Platform Stats Grid -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-label">Total Businesses</span>
+              <div class="stat-value" id="admTotalBiz">0</div>
+              <div class="stat-subtext" id="admActiveBiz">0 active</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Total Platform Users</span>
+              <div class="stat-value" id="admTotalUsers">0</div>
+              <div class="stat-subtext">Across all accounts</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">System Health</span>
+              <div class="stat-value" style="color: var(--success); font-size: 1.4rem;">Operational</div>
+              <div class="stat-subtext">99.98% Uptime</div>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Global Feedbacks</span>
+              <div class="stat-value" id="admTotalFeedbacks">0</div>
+              <div class="stat-subtext">Processed safely</div>
+            </div>
+          </div>
+
+          <!-- Businesses Management Table/Cards -->
+          <div class="card" style="margin-bottom: 24px;">
+            <h3 class="h3" style="margin-bottom: 14px;">Registered Businesses</h3>
+            <div id="adminBusinessesList" class="mobile-cards-list">
+              <!-- Populated by app.js -->
+            </div>
+          </div>
+
+          <!-- Global Audit Trail -->
+          <div class="card">
+            <h3 class="h3" style="margin-bottom: 14px;">Recent System Audit Trail</h3>
+            <div id="adminAuditList" style="display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto;">
+              <!-- Populated by app.js -->
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL: FEEDBACK DETAIL & RESOLUTION
+       ========================================== -->
+  <div class="modal-backdrop" id="feedbackDetailModal" aria-hidden="true">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="h3" id="modalFbTitle" style="font-size: 1.15rem;">Feedback Details</h3>
+        <button type="button" class="drawer-close-btn" onclick="app.closeFeedbackModal()">✕</button>
+      </div>
+
+      <div class="modal-body" id="modalFbBody">
+        <!-- Injected by app.js -->
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="app.closeFeedbackModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL: ADD LOCATION
+       ========================================== -->
+  <div class="modal-backdrop" id="addLocationModal" aria-hidden="true">
+    <div class="modal-container" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="h3">Add New Store Location</h3>
+        <button type="button" class="drawer-close-btn" onclick="app.closeAddLocationModal()">✕</button>
+      </div>
+
+      <form id="addLocationForm" onsubmit="app.saveNewLocation(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="newLocName">Location Name <span class="required">*</span></label>
+            <input type="text" id="newLocName" class="form-input" required placeholder="e.g. Northside Drive-Thru">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newLocCode">Location Code</label>
+            <input type="text" id="newLocCode" class="form-input" placeholder="e.g. NS-04">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newLocAddress">Physical Address <span class="required">*</span></label>
+            <input type="text" id="newLocAddress" class="form-input" required placeholder="789 North Boulevard">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newLocManager">Store Manager</label>
+            <input type="text" id="newLocManager" class="form-input" placeholder="e.g. Elena Diaz">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="app.closeAddLocationModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Location</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL: FORM PREVIEW (Interactive)
+       ========================================== -->
+  <div class="modal-backdrop" id="previewModal" aria-hidden="true">
+    <div class="modal-container" style="max-width: 520px; border-radius: var(--radius-xl);">
+      <div class="modal-header">
+        <h3 class="h3">📱 Mobile Form Preview</h3>
+        <button type="button" class="drawer-close-btn" onclick="app.closePreviewModal()">✕</button>
+      </div>
+      <div class="modal-body" id="previewModalBody" style="background-color: var(--neutral-50);">
+        <!-- Injected by app.js -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="app.closePreviewModal()">Close Preview</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="appToastContainer"></div>
+
+  <!-- Application Main Controller -->
+  <script src="/js/app.js"></script>
+</body>
+</html>

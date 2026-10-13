@@ -1,0 +1,1415 @@
+// FeedbackHub Main Application Client Controller
+// Mobile-First Architecture for All Screens (320px - 1440px+)
+
+const app = (function () {
+  'use strict';
+
+  let token = localStorage.getItem('fh_token') || null;
+  let currentUser = null;
+  let currentBusiness = null;
+  let locations = [];
+  let forms = [];
+  let feedbacks = [];
+  let currentBuilderForm = null;
+
+  // Chart instances
+  let trendChartInstance = null;
+  let sentimentChartInstance = null;
+  let ratingDistChartInstance = null;
+
+  // UI Elements
+  const views = {
+    landing: document.getElementById('view-landing'),
+    login: document.getElementById('view-login'),
+    register: document.getElementById('view-register'),
+    dashboard: document.getElementById('view-dashboard'),
+    inbox: document.getElementById('view-inbox'),
+    builder: document.getElementById('view-builder'),
+    analytics: document.getElementById('view-analytics'),
+    qr: document.getElementById('view-qr'),
+    locations: document.getElementById('view-locations'),
+    settings: document.getElementById('view-settings'),
+    admin: document.getElementById('view-admin')
+  };
+
+  const mobileDrawer = document.getElementById('mobileDrawer');
+  const drawerBackdrop = document.getElementById('drawerBackdrop');
+  const hamburgerBtn = document.getElementById('hamburgerBtn');
+  const drawerCloseBtn = document.getElementById('drawerCloseBtn');
+  const pageTitle = document.getElementById('pageTitle');
+
+  // --- API Helper ---
+  async function api(endpoint, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {})
+    };
+
+    const res = await fetch(endpoint, { ...options, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Server request failed');
+    }
+    return data;
+  }
+
+  // --- Mobile Drawer Controls ---
+  function openMobileDrawer() {
+    mobileDrawer.classList.add('active');
+    drawerBackdrop.classList.add('active');
+    document.body.style.overflow = 'hidden'; // prevent background scrolling
+  }
+
+  function closeMobileDrawer() {
+    mobileDrawer.classList.remove('active');
+    drawerBackdrop.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  // --- Toast Notifications ---
+  function showToast(message, type = 'success') {
+    const container = document.getElementById('appToastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+      <span>${escapeHtml(message)}</span>
+      <button style="background:none; border:none; color:#ffffff; font-size:1.1rem; cursor:pointer;" onclick="this.parentElement.remove()">✕</button>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => {
+      if (toast.parentElement) toast.remove();
+    }, 3500);
+  }
+
+  // --- Router ---
+  function navigate(viewName) {
+    closeMobileDrawer();
+
+    // If unauthenticated and trying to access protected views
+    if (!token && !['landing', 'login', 'register'].includes(viewName)) {
+      window.location.hash = '#/login';
+      return;
+    }
+
+    // Hide all views
+    Object.keys(views).forEach(key => {
+      if (views[key]) views[key].classList.add('hidden');
+    });
+
+    // Update active nav links
+    document.querySelectorAll('.nav-link').forEach(link => {
+      if (link.getAttribute('data-view') === viewName) {
+        link.classList.add('active');
+      } else {
+        link.classList.remove('active');
+      }
+    });
+
+    // Show target view
+    const targetView = views[viewName] || views.dashboard;
+    if (targetView) targetView.classList.remove('hidden');
+
+    // Update header & page specific logic
+    const titles = {
+      landing: 'Welcome to FeedbackHub',
+      login: 'Sign In',
+      register: 'Create Account',
+      dashboard: 'Business Dashboard',
+      inbox: 'Feedback Inbox',
+      builder: 'Form Builder',
+      analytics: 'Analytics & Insights',
+      qr: 'QR Code Generator',
+      locations: 'Store Locations',
+      settings: 'Business Settings',
+      admin: 'Super Admin Portal'
+    };
+
+    if (pageTitle) pageTitle.textContent = titles[viewName] || 'Dashboard';
+
+    // View initialization hooks
+    if (viewName === 'dashboard') loadDashboard();
+    else if (viewName === 'inbox') loadInbox();
+    else if (viewName === 'builder') initFormBuilder();
+    else if (viewName === 'analytics') loadAnalytics();
+    else if (viewName === 'qr') loadQrView();
+    else if (viewName === 'locations') loadLocationsView();
+    else if (viewName === 'settings') loadSettingsView();
+    else if (viewName === 'admin') loadAdminView();
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function handleRoute() {
+    const hash = window.location.hash.replace('#/', '').split('?')[0] || (token ? 'dashboard' : 'landing');
+    navigate(hash);
+  }
+
+  // --- Auth & Session ---
+  async function initSession() {
+    if (!token) {
+      // Default to Sarah (Owner demo) if opening dashboard directly
+      if (window.location.hash && !['#/login', '#/register', '#/landing'].includes(window.location.hash)) {
+        await switchDemo('owner');
+        return;
+      }
+      handleRoute();
+      return;
+    }
+
+    try {
+      const data = await api('/api/auth/me');
+      currentUser = data.user;
+      currentBusiness = data.business;
+      updateUserUI();
+      await fetchCommonData();
+      handleRoute();
+    } catch (err) {
+      console.warn('Session expired or invalid, logging out:', err);
+      logout();
+    }
+  }
+
+  async function switchDemo(role) {
+    try {
+      const data = await api('/api/auth/switch-demo', {
+        method: 'POST',
+        body: JSON.stringify({ role })
+      });
+
+      token = data.token;
+      localStorage.setItem('fh_token', token);
+      currentUser = data.user;
+      currentBusiness = data.business;
+
+      showToast(`Switched to demo role: ${role}`, 'success');
+      updateUserUI();
+      await fetchCommonData();
+
+      if (role === 'superadmin') {
+        window.location.hash = '#/admin';
+      } else {
+        window.location.hash = '#/dashboard';
+      }
+      handleRoute();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function updateUserUI() {
+    if (!currentUser) return;
+
+    const userAvatar = document.getElementById('userAvatar');
+    const userName = document.getElementById('userName');
+    const drawerBizName = document.getElementById('drawerBizName');
+    const desktopBizName = document.getElementById('desktopBizName');
+    const mobileAdminItem = document.getElementById('mobileAdminNavItem');
+    const desktopAdminItem = document.getElementById('desktopAdminNavItem');
+
+    if (userAvatar) userAvatar.textContent = currentUser.avatar || '👤';
+    if (userName) userName.textContent = currentUser.name.split(' ')[0];
+
+    const bizDisplayName = currentBusiness ? currentBusiness.name : (currentUser.role === 'superadmin' ? 'Super Admin Mode' : 'My Business');
+    if (drawerBizName) drawerBizName.textContent = bizDisplayName;
+    if (desktopBizName) desktopBizName.textContent = bizDisplayName;
+
+    const isSuperAdmin = currentUser.role === 'superadmin';
+    if (mobileAdminItem) mobileAdminItem.classList.toggle('hidden', !isSuperAdmin);
+    if (desktopAdminItem) desktopAdminItem.classList.toggle('hidden', !isSuperAdmin);
+
+    const publicLink = document.getElementById('headerPublicFormLink');
+    if (publicLink) publicLink.style.display = 'inline-flex';
+  }
+
+  function logout() {
+    token = null;
+    currentUser = null;
+    currentBusiness = null;
+    localStorage.removeItem('fh_token');
+    showToast('Logged out successfully', 'info');
+    window.location.hash = '#/landing';
+    handleRoute();
+  }
+
+  async function fetchCommonData() {
+    try {
+      const [locRes, formsRes] = await Promise.all([
+        api('/api/locations'),
+        api('/api/forms')
+      ]);
+      locations = locRes.locations || [];
+      forms = formsRes.forms || [];
+      populateLocationDropdowns();
+    } catch (err) {
+      console.error('Error fetching common data:', err);
+    }
+  }
+
+  function populateLocationDropdowns() {
+    const dashSelect = document.getElementById('dashLocationSelect');
+    const inboxSelect = document.getElementById('inboxLocationFilter');
+    const analyticsSelect = document.getElementById('analyticsLocationSelect');
+    const builderSelect = document.getElementById('builderLocation');
+
+    const optionsHtml = '<option value="all">All Locations</option>' +
+      locations.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+
+    if (dashSelect) dashSelect.innerHTML = optionsHtml;
+    if (inboxSelect) inboxSelect.innerHTML = optionsHtml;
+    if (analyticsSelect) analyticsSelect.innerHTML = optionsHtml;
+
+    if (builderSelect) {
+      builderSelect.innerHTML = '<option value="">All Locations (General)</option>' +
+        locations.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+    }
+  }
+
+  // --- Dashboard ---
+  async function loadDashboard() {
+    const locId = document.getElementById('dashLocationSelect')?.value || 'all';
+    const timeRange = document.getElementById('dashTimeSelect')?.value || 'all';
+
+    try {
+      const [analyticsData, fbRes] = await Promise.all([
+        api(`/api/analytics/dashboard?locationId=${locId}&timeRange=${timeRange}`),
+        api(`/api/feedback?locationId=${locId}`)
+      ]);
+
+      const s = analyticsData.summary;
+      document.getElementById('statTotalResponses').textContent = s.total;
+      document.getElementById('statAvgRating').textContent = s.avgRating;
+      document.getElementById('statRatingStars').textContent = '★'.repeat(Math.round(parseFloat(s.avgRating))) + '☆'.repeat(5 - Math.round(parseFloat(s.avgRating)));
+      document.getElementById('statNpsScore').textContent = (s.npsScore >= 0 ? '+' : '') + s.npsScore;
+      document.getElementById('statPendingComplaints').textContent = s.pendingComplaints;
+      document.getElementById('statResolutionRate').textContent = `${s.resolutionRate}% Resolved`;
+
+      renderDashboardCharts(analyticsData.timeline, analyticsData.sentimentCounts);
+      renderRecentFeedbacks(fbRes.feedbacks.slice(0, 5));
+    } catch (err) {
+      console.error('Error loading dashboard:', err);
+    }
+  }
+
+  function renderDashboardCharts(timeline, sentimentCounts) {
+    // 1. Trend Chart
+    const trendCtx = document.getElementById('trendChartCanvas');
+    if (trendCtx) {
+      if (trendChartInstance) trendChartInstance.destroy();
+
+      trendChartInstance = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: timeline.map(t => t.date),
+          datasets: [
+            {
+              label: 'Responses Count',
+              data: timeline.map(t => t.count),
+              borderColor: '#4f46e5',
+              backgroundColor: 'rgba(79, 70, 229, 0.1)',
+              borderWidth: 2.5,
+              tension: 0.35,
+              fill: true,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Avg Rating (★)',
+              data: timeline.map(t => t.avgRating),
+              borderColor: '#f59e0b',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              borderDash: [4, 4],
+              tension: 0.2,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1 } },
+            y1: { min: 0, max: 5, position: 'right', grid: { drawOnChartArea: false }, ticks: { stepSize: 1 } }
+          }
+        }
+      });
+    }
+
+    // 2. Sentiment Doughnut
+    const sentCtx = document.getElementById('sentimentChartCanvas');
+    if (sentCtx) {
+      if (sentimentChartInstance) sentimentChartInstance.destroy();
+
+      sentimentChartInstance = new Chart(sentCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Positive (4-5★)', 'Neutral (3★)', 'Negative (1-2★)'],
+          datasets: [
+            {
+              data: [sentimentCounts.positive, sentimentCounts.neutral, sentimentCounts.negative],
+              backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+              borderWidth: 2,
+              borderColor: '#ffffff'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '65%',
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+          }
+        }
+      });
+    }
+  }
+
+  function renderRecentFeedbacks(list) {
+    const container = document.getElementById('dashRecentFeedbacks');
+    if (!container) return;
+
+    if (list.length === 0) {
+      container.innerHTML = '<p class="text-muted text-sm text-center" style="padding: 20px;">No feedback responses received yet.</p>';
+      return;
+    }
+
+    container.innerHTML = list.map(fb => createFeedbackCardHtml(fb)).join('');
+  }
+
+  // --- Inbox (Feedback Management) ---
+  async function loadInbox() {
+    try {
+      const q = buildInboxFilterQuery();
+      const res = await api(`/api/feedback${q}`);
+      feedbacks = res.feedbacks || [];
+      renderInboxFeedbacks(feedbacks);
+    } catch (err) {
+      console.error('Error loading inbox:', err);
+    }
+  }
+
+  function buildInboxFilterQuery() {
+    const search = document.getElementById('inboxSearchInput')?.value.trim() || '';
+    const rating = document.getElementById('inboxRatingFilter')?.value || 'all';
+    const status = document.getElementById('inboxStatusFilter')?.value || 'all';
+    const priority = document.getElementById('inboxPriorityFilter')?.value || 'all';
+    const loc = document.getElementById('inboxLocationFilter')?.value || 'all';
+
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (rating !== 'all') params.append('rating', rating);
+    if (status !== 'all') params.append('status', status);
+    if (priority !== 'all') params.append('priority', priority);
+    if (loc !== 'all') params.append('locationId', loc);
+
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+  }
+
+  let filterDebounce = null;
+  function filterInbox() {
+    clearTimeout(filterDebounce);
+    filterDebounce = setTimeout(() => {
+      loadInbox();
+    }, 250);
+  }
+
+  function renderInboxFeedbacks(list) {
+    const countText = document.getElementById('inboxCountText');
+    if (countText) countText.textContent = `Showing ${list.length} feedback response${list.length === 1 ? '' : 's'}`;
+
+    // 1. Mobile Cards (< 900px)
+    const cardsContainer = document.getElementById('inboxCardsList');
+    if (cardsContainer) {
+      if (list.length === 0) {
+        cardsContainer.innerHTML = '<div class="card text-center text-muted" style="padding: 30px;">No feedback found matching the selected filters.</div>';
+      } else {
+        cardsContainer.innerHTML = list.map(fb => createFeedbackCardHtml(fb)).join('');
+      }
+    }
+
+    // 2. Desktop Table (>= 900px)
+    const tableBody = document.getElementById('inboxTableBody');
+    if (tableBody) {
+      if (list.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 30px;">No feedback found matching filters.</td></tr>';
+      } else {
+        tableBody.innerHTML = list.map(fb => `
+          <tr>
+            <td>
+              <div style="font-weight:700; color:#f59e0b;">
+                ${'★'.repeat(fb.rating)}${'☆'.repeat(5 - fb.rating)}
+                <span style="color:var(--neutral-700); font-size:0.85rem; margin-left:4px;">(${fb.rating})</span>
+              </div>
+            </td>
+            <td>
+              <div style="font-weight:600;">${escapeHtml(fb.customerName || 'Anonymous')}</div>
+              <div style="font-size:0.75rem; color:var(--neutral-500);">${escapeHtml(fb.customerEmail || 'No email')}</div>
+            </td>
+            <td>
+              <div style="max-width: 260px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                ${escapeHtml(fb.comments || 'No comment text provided')}
+              </div>
+            </td>
+            <td><span class="badge badge-${fb.status}">${fb.status.replace('_', ' ')}</span></td>
+            <td><span class="badge badge-${fb.priority}">${fb.priority}</span></td>
+            <td><span style="font-size:0.85rem;">${escapeHtml(fb.locationName || 'General')}</span></td>
+            <td><span style="font-size:0.8rem; color:var(--neutral-500);">${new Date(fb.createdAt).toLocaleDateString()}</span></td>
+            <td>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.openFeedbackModal('${fb.id}')">
+                Manage
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+  }
+
+  function createFeedbackCardHtml(fb) {
+    const stars = '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating);
+    const dateFormatted = new Date(fb.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    return `
+      <div class="feedback-card" id="card-${fb.id}">
+        <div class="feedback-card-header">
+          <div>
+            <div style="color: #f59e0b; font-size: 1.15rem; font-weight: 700;">${stars}</div>
+            <div style="font-weight: 700; font-size: 0.95rem; color: var(--neutral-900); margin-top: 2px;">
+              ${escapeHtml(fb.customerName || 'Anonymous Customer')}
+            </div>
+          </div>
+          <div class="feedback-card-badges">
+            <span class="badge badge-${fb.sentiment}">${fb.sentiment}</span>
+            <span class="badge badge-${fb.status}">${fb.status.replace('_', ' ')}</span>
+            <span class="badge badge-${fb.priority}">${fb.priority}</span>
+          </div>
+        </div>
+
+        <div class="feedback-card-body">
+          ${fb.comments ? `"${escapeHtml(fb.comments)}"` : '<em style="color:var(--neutral-400);">No written comment text</em>'}
+        </div>
+
+        <div class="feedback-card-footer">
+          <div>
+            <span>📍 ${escapeHtml(fb.locationName || 'Main Store')}</span> • <span>${dateFormatted}</span>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.openFeedbackModal('${fb.id}')">
+            View &amp; Resolve →
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- Feedback Detail & Resolution Modal ---
+  async function openFeedbackModal(id) {
+    try {
+      const res = await api(`/api/feedback/${id}`);
+      const fb = res.feedback;
+      const modal = document.getElementById('feedbackDetailModal');
+      const modalBody = document.getElementById('modalFbBody');
+
+      const dateStr = new Date(fb.createdAt).toLocaleString();
+      const stars = '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating);
+
+      // Render Modal Content
+      modalBody.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Top summary -->
+          <div style="background-color: var(--neutral-50); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <span style="color:#f59e0b; font-size: 1.4rem; font-weight: 700;">${stars}</span>
+              <div style="display: flex; gap: 6px;">
+                <span class="badge badge-${fb.sentiment}">${fb.sentiment}</span>
+                <span class="badge badge-${fb.priority}">${fb.priority}</span>
+              </div>
+            </div>
+            <div style="font-weight: 600; font-size: 1rem;">${escapeHtml(fb.customerName || 'Anonymous Customer')}</div>
+            <div style="font-size: 0.85rem; color: var(--neutral-600); margin-top: 4px;">
+              📧 ${escapeHtml(fb.customerEmail || 'No email')} ${fb.customerPhone ? `• 📞 ${escapeHtml(fb.customerPhone)}` : ''}
+            </div>
+            <div style="font-size: 0.75rem; color: var(--neutral-400); margin-top: 6px;">
+              Submitted on ${dateStr} • via ${escapeHtml(fb.source || 'QR Code')}
+            </div>
+          </div>
+
+          <!-- Comment text -->
+          <div>
+            <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--neutral-700); margin-bottom: 6px;">Customer Comment</h4>
+            <div style="background-color: #ffffff; border: 1px solid var(--neutral-200); padding: 12px; border-radius: var(--radius-md); font-size: 0.95rem; line-height: 1.5;">
+              ${escapeHtml(fb.comments || 'No comment provided.')}
+            </div>
+          </div>
+
+          <!-- Dynamic Question Answers -->
+          ${fb.answers && Object.keys(fb.answers).length > 0 ? `
+            <div>
+              <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--neutral-700); margin-bottom: 6px;">Question Responses</h4>
+              <div style="background-color: var(--neutral-50); border: 1px solid var(--neutral-200); padding: 12px; border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 8px; font-size: 0.88rem;">
+                ${Object.entries(fb.answers).map(([key, val]) => `
+                  <div>
+                    <span style="font-weight: 600; color: var(--neutral-700);">${escapeHtml(key)}:</span>
+                    <span style="color: var(--neutral-900); margin-left: 6px;">${escapeHtml(String(val))}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Quick Actions: Status & Priority & Assignment -->
+          <div style="display: grid; grid-template-columns: 1fr; gap: 12px; border-top: 1px solid var(--neutral-200); padding-top: 14px;">
+            <div class="form-group">
+              <label class="form-label" style="font-size: 0.85rem;">Workflow Status</label>
+              <select id="modalStatusSelect" class="form-select" onchange="app.updateFeedbackStatus('${fb.id}', this.value)">
+                <option value="new" ${fb.status === 'new' ? 'selected' : ''}>🔵 New</option>
+                <option value="in_review" ${fb.status === 'in_review' ? 'selected' : ''}>🟠 In Review</option>
+                <option value="resolved" ${fb.status === 'resolved' ? 'selected' : ''}>🟢 Resolved</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" style="font-size: 0.85rem;">Priority Level</label>
+              <select id="modalPrioritySelect" class="form-select" onchange="app.updateFeedbackPriority('${fb.id}', this.value)">
+                <option value="low" ${fb.priority === 'low' ? 'selected' : ''}>Low</option>
+                <option value="medium" ${fb.priority === 'medium' ? 'selected' : ''}>Medium</option>
+                <option value="urgent" ${fb.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
+                <option value="critical" ${fb.priority === 'critical' ? 'selected' : ''}>Critical</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Internal Notes Thread -->
+          <div style="border-top: 1px solid var(--neutral-200); padding-top: 14px;">
+            <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--neutral-700); margin-bottom: 8px;">Internal Team Notes</h4>
+            <div id="modalNotesContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; max-height: 180px; overflow-y: auto;">
+              ${(fb.internalNotes || []).length > 0 ? fb.internalNotes.map(n => `
+                <div style="background-color: var(--neutral-100); padding: 8px 12px; border-radius: var(--radius-md); font-size: 0.85rem;">
+                  <div style="display: flex; justify-content: space-between; font-weight: 600; color: var(--neutral-700); margin-bottom: 2px;">
+                    <span>${escapeHtml(n.author)}</span>
+                    <span style="font-size: 0.75rem; color: var(--neutral-400);">${new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div>${escapeHtml(n.text)}</div>
+                </div>
+              `).join('') : '<p class="text-muted text-sm">No internal notes yet.</p>'}
+            </div>
+
+            <!-- Add Note Form -->
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="newNoteInput" class="form-input" placeholder="Add an internal note..." style="min-height: 40px; font-size: 0.88rem;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.addInternalNote('${fb.id}')">Add</button>
+            </div>
+          </div>
+
+          <!-- Complaint Resolution Section -->
+          ${fb.status !== 'resolved' ? `
+            <div style="border-top: 1px solid var(--neutral-200); padding-top: 14px; background-color: var(--success-light); padding: 14px; border-radius: var(--radius-md);">
+              <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--success-text); margin-bottom: 6px;">Mark Complaint as Resolved</h4>
+              <p class="text-sm" style="color: var(--success-text); margin-bottom: 8px;">Document follow-up action taken (e.g. voucher sent, apology call):</p>
+              <textarea id="resolutionNoteInput" class="form-textarea" rows="2" placeholder="e.g. Called customer, replaced drink, issue resolved."></textarea>
+              <button type="button" class="btn btn-success btn-block btn-sm mt-4" onclick="app.resolveComplaint('${fb.id}')">
+                ✓ Mark as Resolved
+              </button>
+            </div>
+          ` : `
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: var(--radius-md); font-size: 0.85rem; color: #166534;">
+              <strong>✓ Resolved</strong> by ${escapeHtml(fb.resolution?.resolvedBy || 'Team')} on ${new Date(fb.resolution?.resolvedAt || fb.updatedAt).toLocaleDateString()}
+              ${fb.resolution?.resolutionNote ? `<div style="margin-top:4px;"><em>"${escapeHtml(fb.resolution.resolutionNote)}"</em></div>` : ''}
+            </div>
+          `}
+        </div>
+      `;
+
+      modal.classList.add('active');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function closeFeedbackModal() {
+    document.getElementById('feedbackDetailModal')?.classList.remove('active');
+  }
+
+  async function updateFeedbackStatus(id, status) {
+    try {
+      await api(`/api/feedback/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      });
+      showToast(`Status updated to ${status}`);
+      loadInbox();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function updateFeedbackPriority(id, priority) {
+    try {
+      await api(`/api/feedback/${id}/priority`, {
+        method: 'PATCH',
+        body: JSON.stringify({ priority })
+      });
+      showToast(`Priority updated to ${priority}`);
+      loadInbox();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function addInternalNote(id) {
+    const input = document.getElementById('newNoteInput');
+    const text = input?.value.trim();
+    if (!text) return;
+
+    try {
+      await api(`/api/feedback/${id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ text })
+      });
+      input.value = '';
+      showToast('Internal note saved');
+      openFeedbackModal(id); // reload modal content
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function resolveComplaint(id) {
+    const note = document.getElementById('resolutionNoteInput')?.value.trim();
+    try {
+      await api(`/api/feedback/${id}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ resolutionNote: note })
+      });
+      showToast('Feedback marked as resolved!', 'success');
+      closeFeedbackModal();
+      loadInbox();
+      loadDashboard();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  // --- Form Builder ---
+  async function initFormBuilder() {
+    try {
+      const res = await api('/api/forms');
+      forms = res.forms || [];
+
+      const selector = document.getElementById('builderFormSelector');
+      if (selector) {
+        selector.innerHTML = forms.map(f => `
+          <option value="${f.id}">${escapeHtml(f.title)} (${escapeHtml(f.slug)})</option>
+        `).join('');
+
+        if (forms.length > 0) {
+          loadBuilderForm(forms[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Error init form builder:', err);
+    }
+  }
+
+  async function loadBuilderForm(formId) {
+    try {
+      const res = await api(`/api/forms/${formId}`);
+      currentBuilderForm = res.form;
+
+      document.getElementById('builderTitle').value = currentBuilderForm.title || '';
+      document.getElementById('builderDesc').value = currentBuilderForm.description || '';
+      document.getElementById('builderLocation').value = currentBuilderForm.locationId || '';
+      document.getElementById('builderStatus').value = currentBuilderForm.status || 'published';
+      document.getElementById('builderGoogleUrl').value = currentBuilderForm.googleReviewUrl || '';
+
+      renderBuilderQuestions();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function renderBuilderQuestions() {
+    const container = document.getElementById('builderQuestionsContainer');
+    if (!container || !currentBuilderForm) return;
+
+    const questions = currentBuilderForm.questions || [];
+    container.innerHTML = questions.map((q, index) => {
+      const isFirst = index === 0;
+      const isLast = index === questions.length - 1;
+
+      return `
+        <div class="builder-question-card" id="q-card-${index}">
+          <div class="builder-question-header">
+            <span style="font-weight: 700; font-size: 0.95rem; color: var(--primary);">
+              Question ${index + 1}
+            </span>
+            <div class="builder-actions-group">
+              <!-- Accessible Touch Reorder Controls -->
+              <button type="button" class="reorder-btn" title="Move Up" aria-label="Move question up" onclick="app.moveQuestion(${index}, -1)" ${isFirst ? 'disabled' : ''}>
+                ▲
+              </button>
+              <button type="button" class="reorder-btn" title="Move Down" aria-label="Move question down" onclick="app.moveQuestion(${index}, 1)" ${isLast ? 'disabled' : ''}>
+                ▼
+              </button>
+              <button type="button" class="icon-btn" style="color:var(--danger); border-color:#fecaca;" title="Delete Question" aria-label="Delete question" onclick="app.deleteQuestion(${index})">
+                🗑️
+              </button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-size: 0.85rem;">Question Prompt / Label</label>
+              <input type="text" class="form-input" value="${escapeHtml(q.text)}" oninput="app.updateQuestionField(${index}, 'text', this.value)">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+              <div class="form-group">
+                <label class="form-label" style="font-size: 0.85rem;">Input Control Type</label>
+                <select class="form-select" onchange="app.updateQuestionField(${index}, 'type', this.value)">
+                  <option value="rating" ${q.type === 'rating' ? 'selected' : ''}>⭐ 5-Star Rating Control</option>
+                  <option value="nps" ${q.type === 'nps' ? 'selected' : ''}>📈 Net Promoter Score (0-10 Scale)</option>
+                  <option value="choice" ${q.type === 'choice' ? 'selected' : ''}>🔘 Multiple Choice Chips</option>
+                  <option value="yesno" ${q.type === 'yesno' ? 'selected' : ''}>👍 Yes / No Toggle</option>
+                  <option value="text" ${q.type === 'text' ? 'selected' : ''}>📝 Open Feedback Text Box</option>
+                </select>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <input type="checkbox" id="req_${index}" style="width: 20px; height: 20px;" ${q.required ? 'checked' : ''} onchange="app.updateQuestionField(${index}, 'required', this.checked)">
+                <label for="req_${index}" class="form-label" style="margin: 0; cursor: pointer;">Mandatory / Required question</label>
+              </div>
+            </div>
+
+            ${q.type === 'choice' ? `
+              <div style="background-color: var(--neutral-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+                <label class="form-label" style="font-size: 0.85rem;">Choice Options:</label>
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
+                  ${(q.options || []).map((opt, optIndex) => `
+                    <div style="display: flex; gap: 6px;">
+                      <input type="text" class="form-input" value="${escapeHtml(opt)}" style="min-height: 36px; font-size: 0.88rem;" oninput="app.updateQuestionChoice(${index}, ${optIndex}, this.value)">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="app.removeQuestionChoice(${index}, ${optIndex})">✕</button>
+                    </div>
+                  `).join('')}
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="app.addQuestionChoice(${index})">➕ Add Choice Option</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function moveQuestion(index, direction) {
+    if (!currentBuilderForm || !currentBuilderForm.questions) return;
+    const qList = currentBuilderForm.questions;
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= qList.length) return;
+
+    const temp = qList[index];
+    qList[index] = qList[targetIdx];
+    qList[targetIdx] = temp;
+
+    renderBuilderQuestions();
+    showToast('Question order adjusted');
+  }
+
+  function updateQuestionField(index, field, value) {
+    if (!currentBuilderForm || !currentBuilderForm.questions[index]) return;
+    currentBuilderForm.questions[index][field] = value;
+    if (field === 'type' && value === 'choice' && !currentBuilderForm.questions[index].options) {
+      currentBuilderForm.questions[index].options = ['Option A', 'Option B'];
+      renderBuilderQuestions();
+    }
+  }
+
+  function addQuestionChoice(qIndex) {
+    if (!currentBuilderForm.questions[qIndex].options) {
+      currentBuilderForm.questions[qIndex].options = [];
+    }
+    currentBuilderForm.questions[qIndex].options.push(`New Option ${currentBuilderForm.questions[qIndex].options.length + 1}`);
+    renderBuilderQuestions();
+  }
+
+  function removeQuestionChoice(qIndex, optIndex) {
+    currentBuilderForm.questions[qIndex].options.splice(optIndex, 1);
+    renderBuilderQuestions();
+  }
+
+  function updateQuestionChoice(qIndex, optIndex, val) {
+    currentBuilderForm.questions[qIndex].options[optIndex] = val;
+  }
+
+  function deleteQuestion(index) {
+    if (!currentBuilderForm) return;
+    if (currentBuilderForm.questions.length <= 1) {
+      showToast('A form must have at least one question', 'error');
+      return;
+    }
+    currentBuilderForm.questions.splice(index, 1);
+    renderBuilderQuestions();
+    showToast('Question removed');
+  }
+
+  function addBuilderQuestion() {
+    if (!currentBuilderForm) return;
+    if (!currentBuilderForm.questions) currentBuilderForm.questions = [];
+
+    currentBuilderForm.questions.push({
+      id: 'q_' + Date.now(),
+      type: 'text',
+      text: 'How can we improve your experience?',
+      required: false,
+      multiline: true
+    });
+
+    renderBuilderQuestions();
+    showToast('Added new question card');
+
+    // Scroll to bottom
+    setTimeout(() => {
+      const cards = document.querySelectorAll('.builder-question-card');
+      if (cards.length > 0) {
+        cards[cards.length - 1].scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
+  }
+
+  async function saveCurrentForm() {
+    if (!currentBuilderForm) return;
+
+    const payload = {
+      title: document.getElementById('builderTitle').value.trim(),
+      description: document.getElementById('builderDesc').value.trim(),
+      locationId: document.getElementById('builderLocation').value || null,
+      status: document.getElementById('builderStatus').value,
+      googleReviewUrl: document.getElementById('builderGoogleUrl').value.trim(),
+      questions: currentBuilderForm.questions
+    };
+
+    if (!payload.title) {
+      showToast('Form title is required', 'error');
+      return;
+    }
+
+    try {
+      const res = await api(`/api/forms/${currentBuilderForm.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      currentBuilderForm = res.form;
+      showToast('Form configuration saved successfully!', 'success');
+      fetchCommonData();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function previewCurrentForm() {
+    if (!currentBuilderForm) return;
+    const modal = document.getElementById('previewModal');
+    const body = document.getElementById('previewModalBody');
+
+    body.innerHTML = `
+      <div style="background:#ffffff; border-radius: var(--radius-lg); padding: 18px; border: 1px solid var(--neutral-200);">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 2rem;">☕</div>
+          <h3 style="font-size: 1.15rem; font-weight: 700;">${escapeHtml(currentBuilderForm.title)}</h3>
+          <p class="text-muted text-sm">${escapeHtml(currentBuilderForm.description || '')}</p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          ${(currentBuilderForm.questions || []).map((q, i) => `
+            <div style="border-bottom: 1px solid var(--neutral-100); padding-bottom: 10px;">
+              <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 6px;">
+                ${i + 1}. ${escapeHtml(q.text)} ${q.required ? '<span style="color:red">*</span>' : ''}
+              </div>
+              <div style="color: var(--neutral-400); font-size: 0.82rem; font-style: italic;">
+                [Preview: ${q.type.toUpperCase()} Control]
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    modal.classList.add('active');
+  }
+
+  function closePreviewModal() {
+    document.getElementById('previewModal')?.classList.remove('active');
+  }
+
+  function showQrForCurrentForm() {
+    window.location.hash = '#/qr';
+  }
+
+  // --- Analytics ---
+  async function loadAnalytics() {
+    const timeRange = document.getElementById('analyticsTimeSelect')?.value || 'all';
+    const locId = document.getElementById('analyticsLocationSelect')?.value || 'all';
+
+    try {
+      const data = await api(`/api/analytics/dashboard?timeRange=${timeRange}&locationId=${locId}`);
+
+      // Rating distribution bar chart
+      const distCtx = document.getElementById('ratingDistChartCanvas');
+      if (distCtx) {
+        if (ratingDistChartInstance) ratingDistChartInstance.destroy();
+
+        ratingDistChartInstance = new Chart(distCtx, {
+          type: 'bar',
+          data: {
+            labels: ['5 Stars', '4 Stars', '3 Stars', '2 Stars', '1 Star'],
+            datasets: [
+              {
+                label: 'Responses Count',
+                data: [
+                  data.ratingCounts[5] || 0,
+                  data.ratingCounts[4] || 0,
+                  data.ratingCounts[3] || 0,
+                  data.ratingCounts[2] || 0,
+                  data.ratingCounts[1] || 0
+                ],
+                backgroundColor: ['#10b981', '#34d399', '#f59e0b', '#f87171', '#ef4444'],
+                borderRadius: 6
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+          }
+        });
+      }
+
+      // Location Breakdown list
+      const locListEl = document.getElementById('analyticsLocationList');
+      if (locListEl) {
+        locListEl.innerHTML = data.locationStats.map(ls => `
+          <div style="background-color: var(--neutral-50); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200); display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 700; font-size: 0.95rem;">${escapeHtml(ls.name)}</div>
+              <div style="font-size: 0.8rem; color: var(--neutral-500);">${ls.total} total responses • ${ls.pending} pending</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-weight: 700; color: #f59e0b; font-size: 1.1rem;">★ ${ls.avgRating}</div>
+            </div>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      console.error('Error loading analytics:', err);
+    }
+  }
+
+  function refreshAnalytics() {
+    loadAnalytics();
+  }
+
+  function refreshDashboard() {
+    loadDashboard();
+  }
+
+  // --- QR Codes ---
+  async function loadQrView() {
+    try {
+      const res = await api('/api/forms');
+      forms = res.forms || [];
+
+      const select = document.getElementById('qrFormSelect');
+      if (select) {
+        select.innerHTML = forms.map(f => `
+          <option value="${f.slug}">${escapeHtml(f.title)} (${escapeHtml(f.locationName || 'General')})</option>
+        `).join('');
+
+        const selectedSlug = select.value || (forms.length > 0 ? forms[0].slug : 'apex-downtown');
+        renderSelectedQr(selectedSlug);
+      } else {
+        renderSelectedQr('apex-downtown');
+      }
+    } catch (err) {
+      console.error('Error loading QR view:', err);
+      renderSelectedQr('apex-downtown');
+    }
+  }
+
+  function renderSelectedQr(slug) {
+    const targetSlug = slug || (forms && forms[0] ? forms[0].slug : 'apex-downtown');
+    const canvas = document.getElementById('qrCodeCanvas');
+    const urlText = document.getElementById('qrTargetUrlText');
+    const openLink = document.getElementById('qrOpenFormLink');
+
+    const formUrl = `${window.location.origin}/feedback/${targetSlug}`;
+
+    if (urlText) urlText.textContent = formUrl;
+    if (openLink) openLink.href = formUrl;
+
+    if (canvas) {
+      if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+        window.QRCode.toCanvas(canvas, formUrl, {
+          width: 260,
+          margin: 2,
+          color: {
+            dark: '#0f172a',
+            light: '#ffffff'
+          }
+        }, function (error) {
+          if (error) {
+            console.error('Client QR render error, using fallback:', error);
+            loadQrImageFallback(canvas, formUrl);
+          }
+        });
+      } else {
+        loadQrImageFallback(canvas, formUrl);
+      }
+    }
+  }
+
+  function loadQrImageFallback(canvas, formUrl) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      canvas.width = 260;
+      canvas.height = 260;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 260, 260);
+    };
+    img.src = `/api/qr/image?url=${encodeURIComponent(formUrl)}&size=260`;
+  }
+
+  function copyQrLink() {
+    const urlText = document.getElementById('qrTargetUrlText')?.textContent;
+    if (urlText && navigator.clipboard) {
+      navigator.clipboard.writeText(urlText).then(() => {
+        showToast('Link copied to clipboard! Ready to share or print.', 'success');
+      }).catch(() => {
+        showToast('Could not copy link to clipboard', 'error');
+      });
+    }
+  }
+
+  function downloadQrPng() {
+    const canvas = document.getElementById('qrCodeCanvas');
+    if (canvas) {
+      const link = document.createElement('a');
+      link.download = 'feedback-qr.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('High-resolution QR code image downloaded', 'success');
+    }
+  }
+
+  // --- Locations ---
+  async function loadLocationsView() {
+    try {
+      const res = await api('/api/locations');
+      locations = res.locations || [];
+
+      const container = document.getElementById('locationsContainer');
+      if (container) {
+        container.innerHTML = locations.map(l => `
+          <div class="card" style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <h3 class="h3" style="font-size: 1.1rem;">${escapeHtml(l.name)}</h3>
+              <span class="badge badge-positive">${escapeHtml(l.code || 'Active')}</span>
+            </div>
+            <p class="text-sm text-muted">📍 ${escapeHtml(l.address)}</p>
+            <p class="text-sm" style="color: var(--neutral-700);">Manager: ${escapeHtml(l.manager || 'Sarah Jenkins')}</p>
+            <div style="margin-top: 6px; display: flex; gap: 8px;">
+              <a href="#/qr" class="btn btn-secondary btn-sm">Generate QR</a>
+            </div>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      console.error('Error loading locations view:', err);
+    }
+  }
+
+  function openAddLocationModal() {
+    document.getElementById('addLocationModal')?.classList.add('active');
+  }
+
+  function closeAddLocationModal() {
+    document.getElementById('addLocationModal')?.classList.remove('active');
+  }
+
+  async function saveNewLocation(e) {
+    e.preventDefault();
+    const name = document.getElementById('newLocName').value.trim();
+    const code = document.getElementById('newLocCode').value.trim();
+    const address = document.getElementById('newLocAddress').value.trim();
+    const manager = document.getElementById('newLocManager').value.trim();
+
+    try {
+      await api('/api/locations', {
+        method: 'POST',
+        body: JSON.stringify({ name, code, address, manager })
+      });
+      showToast(`Location ${name} added!`, 'success');
+      closeAddLocationModal();
+      loadLocationsView();
+      fetchCommonData();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  // --- Settings ---
+  async function loadSettingsView() {
+    if (!currentBusiness) {
+      try {
+        const res = await api('/api/auth/me');
+        currentBusiness = res.business;
+      } catch (err) {
+        console.error('Failed to load business profile:', err);
+      }
+    }
+    if (!currentBusiness) return;
+    const nameInput = document.getElementById('setBizName');
+    const catInput = document.getElementById('setCategory');
+    const emailInput = document.getElementById('setEmail');
+    const phoneInput = document.getElementById('setPhone');
+    const addrInput = document.getElementById('setAddress');
+
+    if (nameInput) nameInput.value = currentBusiness.name || '';
+    if (catInput) catInput.value = currentBusiness.category || '';
+    if (emailInput) emailInput.value = currentBusiness.email || '';
+    if (phoneInput) phoneInput.value = currentBusiness.phone || '';
+    if (addrInput) addrInput.value = currentBusiness.address || '';
+  }
+
+  async function saveSettings(e) {
+    e.preventDefault();
+    const name = document.getElementById('setBizName')?.value.trim();
+    const category = document.getElementById('setCategory')?.value.trim();
+    const email = document.getElementById('setEmail')?.value.trim();
+    const phone = document.getElementById('setPhone')?.value.trim();
+    const address = document.getElementById('setAddress')?.value.trim();
+
+    if (!name) {
+      showToast('Business name is required', 'error');
+      return;
+    }
+
+    try {
+      const res = await api('/api/auth/business-settings', {
+        method: 'PUT',
+        body: JSON.stringify({ name, category, email, phone, address })
+      });
+      currentBusiness = res.business;
+      updateUserUI();
+      showToast('Business settings saved successfully!', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  // --- Super Admin ---
+  async function loadAdminView() {
+    try {
+      const res = await api('/api/admin/overview');
+      const stats = res.stats;
+
+      document.getElementById('admTotalBiz').textContent = stats.totalBusinesses;
+      document.getElementById('admActiveBiz').textContent = `${stats.activeBusinesses} active`;
+      document.getElementById('admTotalUsers').textContent = stats.totalUsers;
+      document.getElementById('admTotalFeedbacks').textContent = stats.totalFeedbacks;
+
+      // Businesses list
+      const bizListEl = document.getElementById('adminBusinessesList');
+      if (bizListEl) {
+        bizListEl.innerHTML = res.businesses.map(b => `
+          <div class="card" style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="font-weight: 700; font-size: 1.05rem;">${b.logo || '🏢'} ${escapeHtml(b.name)}</div>
+              <span class="badge ${b.active ? 'badge-positive' : 'badge-negative'}">${b.active ? 'Active' : 'Suspended'}</span>
+            </div>
+            <div class="text-sm text-muted">${escapeHtml(b.category)} • ${escapeHtml(b.address)}</div>
+            <div style="font-size: 0.85rem; color: var(--neutral-600);">
+              ${b.locationCount} locations • ${b.feedbackCount} feedbacks • Rating ★ ${b.averageRating}
+            </div>
+            <div style="margin-top: 6px;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.toggleBusinessStatus('${b.id}')">
+                ${b.active ? 'Suspend Business' : 'Activate Business'}
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Audit logs
+      const auditEl = document.getElementById('adminAuditList');
+      if (auditEl) {
+        auditEl.innerHTML = res.auditLogs.map(a => `
+          <div style="background-color: var(--neutral-50); padding: 8px 12px; border-radius: var(--radius-md); font-size: 0.85rem; border: 1px solid var(--neutral-200);">
+            <div style="display: flex; justify-content: space-between; font-weight: 600;">
+              <span>${escapeHtml(a.action)}</span>
+              <span style="font-size: 0.75rem; color: var(--neutral-400);">${new Date(a.timestamp).toLocaleString()}</span>
+            </div>
+            <div style="color: var(--neutral-600);">${escapeHtml(a.details)} (${escapeHtml(a.user)})</div>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function toggleBusinessStatus(id) {
+    try {
+      await api(`/api/admin/business/${id}/toggle`, { method: 'PATCH' });
+      showToast('Business status updated', 'success');
+      loadAdminView();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  // --- Utilities ---
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, m => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[m]);
+  }
+
+  // --- Initial Bindings ---
+  function bindEvents() {
+    if (hamburgerBtn) hamburgerBtn.addEventListener('click', openMobileDrawer);
+    if (drawerCloseBtn) drawerCloseBtn.addEventListener('click', closeMobileDrawer);
+    if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeMobileDrawer);
+
+    // Nav link clicks close mobile drawer
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', () => {
+        closeMobileDrawer();
+      });
+    });
+
+    // Hash change router
+    window.addEventListener('hashchange', handleRoute);
+
+    // Login Form Submit
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const errEl = document.getElementById('loginError');
+
+        try {
+          const data = await api('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password })
+          });
+          token = data.token;
+          localStorage.setItem('fh_token', token);
+          currentUser = data.user;
+          currentBusiness = data.business;
+          errEl.classList.add('hidden');
+          showToast(`Welcome back, ${currentUser.name}!`, 'success');
+          updateUserUI();
+          await fetchCommonData();
+          window.location.hash = '#/dashboard';
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove('hidden');
+        }
+      });
+    }
+
+    // Register Form Submit
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+      registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const businessName = document.getElementById('regBizName').value.trim();
+        const category = document.getElementById('regCategory').value;
+        const ownerName = document.getElementById('regOwnerName').value.trim();
+        const email = document.getElementById('regEmail').value.trim();
+        const password = document.getElementById('regPassword').value;
+        const errEl = document.getElementById('regError');
+
+        try {
+          const data = await api('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ businessName, category, ownerName, email, password })
+          });
+          token = data.token;
+          localStorage.setItem('fh_token', token);
+          currentUser = data.user;
+          currentBusiness = data.business;
+          errEl.classList.add('hidden');
+          showToast(`Welcome to FeedbackHub, ${ownerName}!`, 'success');
+          updateUserUI();
+          await fetchCommonData();
+          window.location.hash = '#/dashboard';
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove('hidden');
+        }
+      });
+    }
+  }
+
+  // Self init
+  document.addEventListener('DOMContentLoaded', () => {
+    bindEvents();
+    initSession();
+  });
+
+  return {
+    navigate,
+    switchDemo,
+    logout,
+    openMobileDrawer,
+    closeMobileDrawer,
+    refreshDashboard,
+    filterInbox,
+    openFeedbackModal,
+    closeFeedbackModal,
+    updateFeedbackStatus,
+    updateFeedbackPriority,
+    addInternalNote,
+    resolveComplaint,
+    loadBuilderForm,
+    addBuilderQuestion,
+    moveQuestion,
+    updateQuestionField,
+    addQuestionChoice,
+    removeQuestionChoice,
+    updateQuestionChoice,
+    deleteQuestion,
+    saveCurrentForm,
+    previewCurrentForm,
+    closePreviewModal,
+    showQrForCurrentForm,
+    refreshAnalytics,
+    renderSelectedQr,
+    copyQrLink,
+    downloadQrPng,
+    openAddLocationModal,
+    closeAddLocationModal,
+    saveNewLocation,
+    saveSettings,
+    toggleBusinessStatus
+  };
+})();

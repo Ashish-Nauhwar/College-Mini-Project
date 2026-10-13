@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="description" content="Provide fast and easy customer feedback for our business.">
+  <title>Customer Feedback - FeedbackHub</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="public-feedback-page">
+
+  <div class="feedback-public-card" id="feedbackCard">
+    <!-- Header with Business Branding -->
+    <header class="feedback-header-banner" id="bannerSection">
+      <div class="feedback-biz-logo" id="bizLogo">☕</div>
+      <h1 class="h2" id="bizName" style="color: #ffffff;">Loading Experience...</h1>
+      <p id="locName" style="color: rgba(255, 255, 255, 0.9); font-size: 0.9rem;">Please wait while we prepare your feedback form</p>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="feedback-form-body" id="formContainer">
+      <div id="loadingIndicator" class="text-center" style="padding: 30px;">
+        <p class="text-muted">Loading feedback form questions...</p>
+      </div>
+
+      <div id="errorState" class="hidden text-center" style="padding: 30px;">
+        <h2 class="h3" style="color: var(--danger); margin-bottom: 8px;">Unable to Load Form</h2>
+        <p class="text-muted" id="errorMessage">The requested feedback form does not exist or has been paused.</p>
+        <button type="button" class="btn btn-secondary mt-4" onclick="window.location.reload()">Try Again</button>
+      </div>
+
+      <!-- Feedback Submission Form -->
+      <form id="publicFeedbackForm" class="hidden" novalidate>
+        <!-- Form Description -->
+        <p id="formDescription" class="text-muted" style="font-size: 0.95rem; margin-bottom: 8px;"></p>
+
+        <!-- Primary Star Rating Field -->
+        <div class="form-group" id="ratingQuestionGroup">
+          <label class="form-label" id="primaryRatingLabel">
+            Overall Satisfaction <span class="required">*</span>
+          </label>
+          <div class="star-rating-selector" id="starSelector" role="radiogroup" aria-label="Overall Satisfaction Rating">
+            <button type="button" class="star-rating-btn" data-value="1" aria-label="1 Star - Poor" title="1 Star">★</button>
+            <button type="button" class="star-rating-btn" data-value="2" aria-label="2 Stars - Fair" title="2 Stars">★</button>
+            <button type="button" class="star-rating-btn" data-value="3" aria-label="3 Stars - Good" title="3 Stars">★</button>
+            <button type="button" class="star-rating-btn" data-value="4" aria-label="4 Stars - Very Good" title="4 Stars">★</button>
+            <button type="button" class="star-rating-btn" data-value="5" aria-label="5 Stars - Excellent" title="5 Stars">★</button>
+          </div>
+          <p id="ratingHelperText" class="text-center text-muted" style="font-size: 0.85rem; font-weight: 500; min-height: 20px;">
+            Tap a star to rate
+          </p>
+          <div id="ratingError" class="form-error hidden">Please select a star rating</div>
+        </div>
+
+        <!-- Dynamic Questions Container -->
+        <div id="dynamicQuestionsContainer" style="display: flex; flex-direction: column; gap: 18px;">
+          <!-- Questions will be injected here dynamically -->
+        </div>
+
+        <!-- Customer Contact Details (Optional) -->
+        <div style="border-top: 1px solid var(--neutral-200); padding-top: 16px; margin-top: 8px;">
+          <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--neutral-800);">
+            Your Details (Optional)
+          </h3>
+
+          <div class="form-group">
+            <label class="form-label" for="customerName">Your Name</label>
+            <input type="text" id="customerName" name="customerName" class="form-input" placeholder="e.g. Alex Hayes" autocomplete="name">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="customerEmail">Email Address</label>
+            <input type="email" id="customerEmail" name="customerEmail" class="form-input" placeholder="alex@example.com" autocomplete="email">
+            <div id="emailError" class="form-error hidden">Please enter a valid email address</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="customerPhone">Phone Number</label>
+            <input type="tel" id="customerPhone" name="customerPhone" class="form-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+          </div>
+        </div>
+
+        <!-- Submission Status Message -->
+        <div id="submitError" class="form-error hidden" style="margin-bottom: 12px; text-align: center; justify-content: center;"></div>
+
+        <!-- Submit Button (Full Width, Large Touch Target) -->
+        <button type="submit" id="submitBtn" class="btn btn-primary btn-block" style="min-height: 52px; font-size: 1.05rem; font-weight: 600;">
+          Submit Feedback
+        </button>
+
+        <p class="text-center text-muted" style="font-size: 0.75rem; margin-top: 12px;">
+          Powered by FeedbackHub • Secure &amp; Mobile Optimized
+        </p>
+      </form>
+
+      <!-- Success Screen -->
+      <div id="successCard" class="hidden feedback-success-card">
+        <div class="success-check-icon">✓</div>
+        <h2 class="h2" id="successHeading">Thank You!</h2>
+        <p class="text-muted" id="successMessage" style="font-size: 1rem; line-height: 1.6;">
+          Your feedback has been received and shared directly with management.
+        </p>
+
+        <!-- Google Review Call to Action (Shown for 4-5 stars) -->
+        <div id="googleReviewCta" class="hidden" style="width: 100%; max-width: 100%; box-sizing: border-box; background-color: var(--primary-light); padding: 18px; border-radius: var(--radius-lg); margin-top: 8px;">
+          <p style="font-weight: 600; color: var(--primary-text); margin-bottom: 8px; font-size: 0.95rem;">
+            Would you mind sharing your review on Google?
+          </p>
+          <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 12px;">
+            It takes just 30 seconds and helps other locals discover us!
+          </p>
+          <a id="googleReviewBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block">
+            Share on Google Reviews ★★★★★
+          </a>
+        </div>
+
+        <button type="button" class="btn btn-secondary mt-4" onclick="window.location.reload()">
+          Submit Another Response
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/js/feedback.js"></script>
+</body>
+</html>

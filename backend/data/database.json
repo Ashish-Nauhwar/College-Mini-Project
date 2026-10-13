@@ -1,0 +1,783 @@
+{
+  "businesses": [
+    {
+      "id": "biz-1",
+      "name": "Apex Specialty Coffee & Roasters 1791905506052",
+      "category": "Specialty Coffee & Bakery",
+      "address": "104 Market St, Downtown Innovation District",
+      "phone": "+1 (555) 321-9876",
+      "email": "contact@apexartisancafe.com",
+      "website": "https://apexspecialtycoffee.demo",
+      "logo": "☕",
+      "active": true,
+      "createdAt": "2026-09-01T08:00:00.000Z"
+    },
+    {
+      "id": "biz-2",
+      "name": "Nexus Health & Wellness Clinic",
+      "category": "Healthcare & Wellness",
+      "address": "450 Medical Arts Plaza, Suite 300",
+      "phone": "+1 (555) 876-5432",
+      "email": "care@nexusclinic.demo",
+      "website": "https://nexusclinic.demo",
+      "logo": "🏥",
+      "active": true,
+      "createdAt": "2026-09-15T10:00:00.000Z"
+    }
+  ],
+  "users": [
+    {
+      "id": "usr-admin",
+      "name": "System Administrator",
+      "email": "admin@feedbackhub.com",
+      "password": "$2b$10$esKX2LDhgf2Tm9gDG/jCEerHDDFVF.b.Ymung/VWzxSSFE0QoOizu",
+      "role": "superadmin",
+      "businessId": null,
+      "avatar": "🛡️",
+      "createdAt": "2026-08-01T00:00:00.000Z"
+    },
+    {
+      "id": "usr-sarah",
+      "name": "Sarah Jenkins",
+      "email": "sarah@apexcafe.com",
+      "password": "$2b$10$uV/gnx/Os80.bSSp/.QomO1MW0qtHafg4NqrUkQWUe.FbmYu3MKMa",
+      "role": "owner",
+      "businessId": "biz-1",
+      "avatar": "👩‍💼",
+      "createdAt": "2026-09-01T08:00:00.000Z"
+    },
+    {
+      "id": "usr-marcus",
+      "name": "Marcus Vance",
+      "email": "marcus@apexcafe.com",
+      "password": "$2b$10$uV/gnx/Os80.bSSp/.QomO1MW0qtHafg4NqrUkQWUe.FbmYu3MKMa",
+      "role": "manager",
+      "businessId": "biz-1",
+      "avatar": "👨‍💼",
+      "createdAt": "2026-09-05T09:30:00.000Z"
+    },
+    {
+      "id": "usr-elena",
+      "name": "Dr. Elena Rostova",
+      "email": "elena@nexusclinic.com",
+      "password": "$2b$10$uV/gnx/Os80.bSSp/.QomO1MW0qtHafg4NqrUkQWUe.FbmYu3MKMa",
+      "role": "owner",
+      "businessId": "biz-2",
+      "avatar": "👩‍⚕️",
+      "createdAt": "2026-09-15T10:00:00.000Z"
+    }
+  ],
+  "locations": [
+    {
+      "id": "loc-1",
+      "businessId": "biz-1",
+      "name": "Downtown Flagship",
+      "code": "DT-01",
+      "address": "104 Market Street, Downtown",
+      "phone": "+1 (555) 234-5678",
+      "manager": "Marcus Vance",
+      "active": true,
+      "createdAt": "2026-09-01T08:30:00.000Z"
+    },
+    {
+      "id": "loc-2",
+      "businessId": "biz-1",
+      "name": "Airport Terminal 2",
+      "code": "AP-02",
+      "address": "Concourse B, Departure Gate 14",
+      "phone": "+1 (555) 234-5679",
+      "manager": "Elena Diaz",
+      "active": true,
+      "createdAt": "2026-09-10T11:00:00.000Z"
+    },
+    {
+      "id": "loc-3",
+      "businessId": "biz-1",
+      "name": "Westside Mall",
+      "code": "WM-03",
+      "address": "Level 2, Center Atrium Food Court",
+      "phone": "+1 (555) 234-5680",
+      "manager": "David Chen",
+      "active": true,
+      "createdAt": "2026-09-20T14:15:00.000Z"
+    }
+  ],
+  "forms": [
+    {
+      "id": "form-1",
+      "slug": "apex-downtown",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "title": "Downtown Flagship Customer Experience",
+      "description": "Thank you for visiting Apex Specialty Coffee! We value your honest thoughts to help us brew your day better.",
+      "status": "published",
+      "googleReviewUrl": "https://g.page/r/demo-apex-coffee/review",
+      "questions": [
+        {
+          "id": "q1",
+          "type": "rating",
+          "text": "How would you rate your overall experience today?",
+          "required": true,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "id": "q2",
+          "type": "nps",
+          "text": "How likely are you to recommend Apex Coffee to a friend or colleague?",
+          "required": true,
+          "min": 0,
+          "max": 10
+        },
+        {
+          "id": "q3",
+          "type": "choice",
+          "text": "What did you order today?",
+          "options": [
+            "Hand-poured Single Origin Coffee",
+            "Signature Espresso / Flat White",
+            "Fresh Bakery & Artisanal Pastry",
+            "Bag of Whole Bean Coffee to go"
+          ],
+          "required": false
+        },
+        {
+          "id": "q4",
+          "type": "yesno",
+          "text": "Was your order served promptly and with friendly hospitality?",
+          "required": false
+        },
+        {
+          "id": "q5",
+          "type": "text",
+          "text": "What did you love most or how can we improve?",
+          "placeholder": "Tell us about the coffee, service, seating, or music...",
+          "required": false,
+          "multiline": true
+        }
+      ],
+      "createdAt": "2026-09-02T10:00:00.000Z",
+      "updatedAt": "2026-10-01T12:00:00.000Z"
+    },
+    {
+      "id": "form-2",
+      "slug": "apex-airport",
+      "businessId": "biz-1",
+      "locationId": "loc-2",
+      "title": "Airport Express Quick Feedback",
+      "description": "Grabbed a quick pre-flight coffee? Let us know how quickly and smoothly we served you.",
+      "status": "published",
+      "googleReviewUrl": "https://g.page/r/demo-apex-airport/review",
+      "questions": [
+        {
+          "id": "q1",
+          "type": "rating",
+          "text": "Overall speed and service quality:",
+          "required": true,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "id": "q2",
+          "type": "yesno",
+          "text": "Was the wait time under 3 minutes?",
+          "required": true
+        },
+        {
+          "id": "q3",
+          "type": "text",
+          "text": "Any quick feedback for our airport crew?",
+          "required": false,
+          "multiline": true
+        }
+      ],
+      "createdAt": "2026-09-12T09:00:00.000Z",
+      "updatedAt": "2026-09-12T09:00:00.000Z"
+    }
+  ],
+  "feedbacks": [
+    {
+      "id": "fb-101",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "sentiment": "positive",
+      "customerName": "Alexander Hayes",
+      "customerEmail": "alex.hayes@example.com",
+      "customerPhone": "+1 (555) 782-9012",
+      "comments": "Outstanding single-origin Ethiopian pour-over! The floral notes were unbelievable and Marcus was delightful at the counter.",
+      "answers": {
+        "q1": 5,
+        "q2": 10,
+        "q3": "Hand-poured Single Origin Coffee",
+        "q4": "yes",
+        "q5": "Outstanding single-origin Ethiopian pour-over! The floral notes were unbelievable and Marcus was delightful at the counter."
+      },
+      "status": "resolved",
+      "priority": "low",
+      "assignedTo": "Marcus Vance",
+      "internalNotes": [
+        {
+          "id": "note-1",
+          "author": "Marcus Vance",
+          "text": "Customer loved the Guji batch! Shared commendation with the morning baristas.",
+          "createdAt": "2026-10-09T14:22:00.000Z"
+        }
+      ],
+      "resolution": {
+        "resolvedBy": "Marcus Vance",
+        "resolvedAt": "2026-10-09T14:25:00.000Z",
+        "resolutionNote": "Customer delighted. Sent thank-you card."
+      },
+      "source": "QR Code (Table #4)",
+      "createdAt": "2026-10-09T13:40:00.000Z"
+    },
+    {
+      "id": "fb-102",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 2,
+      "nps": 3,
+      "sentiment": "negative",
+      "customerName": "Sophia Lin",
+      "customerEmail": "sophia.lin@testmail.com",
+      "customerPhone": "+1 (555) 349-1120",
+      "comments": "Waited almost 20 minutes for an oat flat white, and when it arrived the temperature was barely lukewarm. Very frustrating when on a tight lunch break.",
+      "answers": {
+        "q1": 2,
+        "q2": 3,
+        "q3": "Signature Espresso / Flat White",
+        "q4": "no",
+        "q5": "Waited almost 20 minutes for an oat flat white, and when it arrived the temperature was barely lukewarm. Very frustrating when on a tight lunch break."
+      },
+      "status": "resolved",
+      "priority": "urgent",
+      "assignedTo": "Marcus Vance",
+      "internalNotes": [
+        {
+          "id": "note-2",
+          "author": "Sarah Jenkins",
+          "text": "Rush hour backlog on machine #2 steam wand. Marcus please reach out to Sophia directly with an apology and a voucher.",
+          "createdAt": "2026-10-10T10:15:00.000Z"
+        },
+        {
+          "id": "note-1791744104983",
+          "createdAt": "2026-10-11T18:41:44.983Z",
+          "author": "Sarah Jenkins",
+          "text": "Resolution call scheduled with customer."
+        },
+        {
+          "id": "note-1791811154200",
+          "createdAt": "2026-10-12T13:19:14.200Z",
+          "author": "Sarah Jenkins",
+          "text": "Resolution call scheduled with customer."
+        },
+        {
+          "id": "note-1791811268280",
+          "createdAt": "2026-10-12T13:21:08.280Z",
+          "author": "Sarah Jenkins",
+          "text": "Resolution call scheduled with customer."
+        },
+        {
+          "id": "note-1791812012425",
+          "createdAt": "2026-10-12T13:33:32.425Z",
+          "author": "Sarah Jenkins",
+          "text": "Resolution call scheduled with customer."
+        },
+        {
+          "id": "note-1791812073727",
+          "createdAt": "2026-10-12T13:34:33.727Z",
+          "author": "Sarah Jenkins",
+          "text": "Resolution call scheduled with customer."
+        },
+        {
+          "id": "note-1791905504385",
+          "createdAt": "2026-10-13T15:31:44.385Z",
+          "author": "Sarah Jenkins",
+          "text": "Resolution call scheduled with customer."
+        }
+      ],
+      "resolution": {
+        "resolvedAt": "2026-10-13T15:31:44.805Z",
+        "resolvedBy": "Sarah Jenkins",
+        "resolutionNote": "Customer offered gift card and issue settled."
+      },
+      "source": "QR Code (Receipt)",
+      "createdAt": "2026-10-10T09:45:00.000Z"
+    },
+    {
+      "id": "fb-103",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 4,
+      "nps": 8,
+      "sentiment": "positive",
+      "customerName": "Jordan Miller",
+      "customerEmail": "jordan.m@webmail.org",
+      "customerPhone": "",
+      "comments": "Vibe is pristine and music playlist is top notch. Great place to get laptop work done. Pastry was slightly crumbly but good flavor.",
+      "answers": {
+        "q1": 4,
+        "q2": 8,
+        "q3": "Fresh Bakery & Artisanal Pastry",
+        "q4": "yes",
+        "q5": "Vibe is pristine and music playlist is top notch. Great place to get laptop work done. Pastry was slightly crumbly but good flavor."
+      },
+      "status": "new",
+      "priority": "medium",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "source": "QR Code (Counter Display)",
+      "createdAt": "2026-10-11T11:20:00.000Z"
+    },
+    {
+      "id": "fb-104",
+      "businessId": "biz-1",
+      "locationId": "loc-2",
+      "formId": "form-2",
+      "rating": 5,
+      "nps": 9,
+      "sentiment": "positive",
+      "customerName": "Emily Watson",
+      "customerEmail": "emily.watson@flytravel.com",
+      "customerPhone": "+1 (555) 671-8899",
+      "comments": "Blazing fast service! Got my double shot cortado in 90 seconds flat. Life saver before a 6 hour flight.",
+      "answers": {
+        "q1": 5,
+        "q2": "yes",
+        "q3": "Blazing fast service! Got my double shot cortado in 90 seconds flat. Life saver before a 6 hour flight."
+      },
+      "status": "resolved",
+      "priority": "low",
+      "assignedTo": "Sarah Jenkins",
+      "internalNotes": [],
+      "resolution": {
+        "resolvedBy": "Sarah Jenkins",
+        "resolvedAt": "2026-10-11T12:00:00.000Z",
+        "resolutionNote": "Reviewed and closed."
+      },
+      "source": "QR Code (Grab & Go Kiosk)",
+      "createdAt": "2026-10-11T08:15:00.000Z"
+    },
+    {
+      "id": "fb-105",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 1,
+      "nps": 1,
+      "sentiment": "negative",
+      "customerName": "Daniel Vance",
+      "customerEmail": "dvance@corpnet.net",
+      "customerPhone": "+1 (555) 991-4433",
+      "comments": "Spilled coffee because the lid was cracked and not fitted properly. Got all over my jacket.",
+      "answers": {
+        "q1": 1,
+        "q2": 1,
+        "q3": "Signature Espresso / Flat White",
+        "q4": "no",
+        "q5": "Spilled coffee because the lid was cracked and not fitted properly. Got all over my jacket."
+      },
+      "status": "new",
+      "priority": "critical",
+      "assignedTo": "Marcus Vance",
+      "internalNotes": [
+        {
+          "id": "note-3",
+          "author": "System Alert",
+          "text": "Urgent 1-Star alert triggered automatically. Follow-up SLA: within 2 hours.",
+          "createdAt": "2026-10-11T16:05:00.000Z"
+        }
+      ],
+      "resolution": null,
+      "source": "QR Code (Table #11)",
+      "createdAt": "2026-10-11T16:04:00.000Z"
+    },
+    {
+      "id": "fb-106",
+      "businessId": "biz-1",
+      "locationId": "loc-3",
+      "formId": "form-1",
+      "rating": 3,
+      "nps": 6,
+      "sentiment": "neutral",
+      "customerName": "Rachel Green",
+      "customerEmail": "rachel.g@citylife.io",
+      "customerPhone": "",
+      "comments": "Average cup today. Beans tasted a bit overly dark roasted compared to the downtown branch.",
+      "answers": {
+        "q1": 3,
+        "q2": 6,
+        "q3": "Hand-poured Single Origin Coffee",
+        "q4": "yes",
+        "q5": "Average cup today. Beans tasted a bit overly dark roasted compared to the downtown branch."
+      },
+      "status": "in_review",
+      "priority": "medium",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "source": "QR Code (Table Tent)",
+      "createdAt": "2026-10-11T18:30:00.000Z"
+    },
+    {
+      "id": "fb-1791744102902-hsh4",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-11T18:41:42.902Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "customerName": "Automated Tester",
+      "customerEmail": "tester@apexcoffee.demo",
+      "customerPhone": "+1 (555) 999-8888",
+      "comments": "",
+      "answers": {
+        "q2": 10
+      },
+      "source": "Mobile Browser QR Scan"
+    },
+    {
+      "id": "fb-1791744245885-jz7v",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-11T18:44:05.885Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 4,
+      "nps": 4,
+      "customerName": "Anonymous Customer",
+      "customerEmail": "",
+      "customerPhone": "",
+      "comments": "",
+      "answers": {
+        "q2": 4,
+        "q3": "Fresh Bakery & Artisanal Pastry",
+        "q4": "yes"
+      },
+      "source": "Mobile Browser QR Scan"
+    },
+    {
+      "id": "fb-1791811152396-04zr",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-12T13:19:12.396Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "customerName": "Automated Tester",
+      "customerEmail": "tester@apexcoffee.demo",
+      "customerPhone": "+1 (555) 999-8888",
+      "comments": "",
+      "answers": {
+        "q2": 10
+      },
+      "source": "Mobile Browser QR Scan"
+    },
+    {
+      "id": "fb-1791811265878-7n16",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-12T13:21:05.878Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "customerName": "Automated Tester",
+      "customerEmail": "tester@apexcoffee.demo",
+      "customerPhone": "+1 (555) 999-8888",
+      "comments": "",
+      "answers": {
+        "q2": 10
+      },
+      "source": "Mobile Browser QR Scan"
+    },
+    {
+      "id": "fb-1791812010039-8167",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-12T13:33:30.039Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "customerName": "Automated Tester",
+      "customerEmail": "tester@apexcoffee.demo",
+      "customerPhone": "+1 (555) 999-8888",
+      "comments": "",
+      "answers": {
+        "q2": 10
+      },
+      "source": "Mobile Browser QR Scan"
+    },
+    {
+      "id": "fb-1791812071327-yj2n",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-12T13:34:31.327Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "customerName": "Automated Tester",
+      "customerEmail": "tester@apexcoffee.demo",
+      "customerPhone": "+1 (555) 999-8888",
+      "comments": "",
+      "answers": {
+        "q2": 10
+      },
+      "source": "Mobile Browser QR Scan"
+    },
+    {
+      "id": "fb-1791905501955-vioo",
+      "sentiment": "positive",
+      "priority": "low",
+      "status": "new",
+      "assignedTo": null,
+      "internalNotes": [],
+      "resolution": null,
+      "createdAt": "2026-10-13T15:31:41.955Z",
+      "businessId": "biz-1",
+      "locationId": "loc-1",
+      "formId": "form-1",
+      "rating": 5,
+      "nps": 10,
+      "customerName": "Automated Tester",
+      "customerEmail": "tester@apexcoffee.demo",
+      "customerPhone": "+1 (555) 999-8888",
+      "comments": "",
+      "answers": {
+        "q2": 10
+      },
+      "source": "Mobile Browser QR Scan"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "aud-1791905506061",
+      "action": "Update Business Settings",
+      "user": "Sarah Jenkins",
+      "details": "Updated business profile for Apex Specialty Coffee & Roasters 1791905506052",
+      "timestamp": "2026-10-13T15:31:46.061Z"
+    },
+    {
+      "id": "aud-1791905504806",
+      "action": "Complaint Resolved",
+      "user": "Sarah Jenkins",
+      "details": "Marked feedback fb-102 as resolved",
+      "timestamp": "2026-10-13T15:31:44.806Z"
+    },
+    {
+      "id": "aud-1791905504386",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added internal note to feedback fb-102",
+      "timestamp": "2026-10-13T15:31:44.386Z"
+    },
+    {
+      "id": "aud-1791905503746",
+      "action": "Feedback Status Updated",
+      "user": "Sarah Jenkins",
+      "details": "Updated feedback fb-102 to in_review",
+      "timestamp": "2026-10-13T15:31:43.746Z"
+    },
+    {
+      "id": "aud-1791905500444",
+      "action": "Demo Login Switched",
+      "user": "Sarah Jenkins",
+      "details": "Switched into owner role",
+      "timestamp": "2026-10-13T15:31:40.444Z"
+    },
+    {
+      "id": "aud-1791905422023",
+      "action": "Update Business Settings",
+      "user": "Sarah Jenkins",
+      "details": "Updated business profile for Apex Artisan Roasters & Cafe (Updated)",
+      "timestamp": "2026-10-13T15:30:22.023Z"
+    },
+    {
+      "id": "aud-1791905422009",
+      "action": "User Login",
+      "user": "Sarah Jenkins",
+      "details": "User logged in (sarah@apexcafe.com)",
+      "timestamp": "2026-10-13T15:30:22.009Z"
+    },
+    {
+      "id": "aud-1791812074143",
+      "action": "Complaint Resolved",
+      "user": "Sarah Jenkins",
+      "details": "Marked feedback fb-102 as resolved",
+      "timestamp": "2026-10-12T13:34:34.143Z"
+    },
+    {
+      "id": "aud-1791812073728",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added internal note to feedback fb-102",
+      "timestamp": "2026-10-12T13:34:33.728Z"
+    },
+    {
+      "id": "aud-1791812073101",
+      "action": "Feedback Status Updated",
+      "user": "Sarah Jenkins",
+      "details": "Updated feedback fb-102 to in_review",
+      "timestamp": "2026-10-12T13:34:33.101Z"
+    },
+    {
+      "id": "aud-1791812012846",
+      "action": "Complaint Resolved",
+      "user": "Sarah Jenkins",
+      "details": "Marked feedback fb-102 as resolved",
+      "timestamp": "2026-10-12T13:33:32.846Z"
+    },
+    {
+      "id": "aud-1791812012426",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added internal note to feedback fb-102",
+      "timestamp": "2026-10-12T13:33:32.426Z"
+    },
+    {
+      "id": "aud-1791812011789",
+      "action": "Feedback Status Updated",
+      "user": "Sarah Jenkins",
+      "details": "Updated feedback fb-102 to in_review",
+      "timestamp": "2026-10-12T13:33:31.789Z"
+    },
+    {
+      "id": "aud-1791811268697",
+      "action": "Complaint Resolved",
+      "user": "Sarah Jenkins",
+      "details": "Marked feedback fb-102 as resolved",
+      "timestamp": "2026-10-12T13:21:08.697Z"
+    },
+    {
+      "id": "aud-1791811268280",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added internal note to feedback fb-102",
+      "timestamp": "2026-10-12T13:21:08.280Z"
+    },
+    {
+      "id": "aud-1791811267644",
+      "action": "Feedback Status Updated",
+      "user": "Sarah Jenkins",
+      "details": "Updated feedback fb-102 to in_review",
+      "timestamp": "2026-10-12T13:21:07.644Z"
+    },
+    {
+      "id": "aud-1791811154612",
+      "action": "Complaint Resolved",
+      "user": "Sarah Jenkins",
+      "details": "Marked feedback fb-102 as resolved",
+      "timestamp": "2026-10-12T13:19:14.612Z"
+    },
+    {
+      "id": "aud-1791811154201",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added internal note to feedback fb-102",
+      "timestamp": "2026-10-12T13:19:14.201Z"
+    },
+    {
+      "id": "aud-1791809582018",
+      "action": "Demo Login Switched",
+      "user": "Marcus Vance",
+      "details": "Switched into manager role",
+      "timestamp": "2026-10-12T12:53:02.018Z"
+    },
+    {
+      "id": "aud-1791744105394",
+      "action": "Complaint Resolved",
+      "user": "Sarah Jenkins",
+      "details": "Marked feedback fb-102 as resolved",
+      "timestamp": "2026-10-11T18:41:45.394Z"
+    },
+    {
+      "id": "aud-1791744104984",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added internal note to feedback fb-102",
+      "timestamp": "2026-10-11T18:41:44.984Z"
+    },
+    {
+      "id": "aud-1791744101393",
+      "action": "Demo Login Switched",
+      "user": "Sarah Jenkins",
+      "details": "Switched into owner role",
+      "timestamp": "2026-10-11T18:41:41.393Z"
+    },
+    {
+      "id": "aud-1791743874739",
+      "action": "Demo Login Switched",
+      "user": "Sarah Jenkins",
+      "details": "Switched into owner role",
+      "timestamp": "2026-10-11T18:37:54.739Z"
+    },
+    {
+      "id": "aud-1",
+      "action": "Form Published",
+      "user": "Sarah Jenkins",
+      "details": "Published Downtown Flagship Customer Experience form (apex-downtown)",
+      "timestamp": "2026-09-02T10:00:00.000Z"
+    },
+    {
+      "id": "aud-2",
+      "action": "Location Added",
+      "user": "Sarah Jenkins",
+      "details": "Added location Airport Terminal 2 (AP-02)",
+      "timestamp": "2026-09-10T11:00:00.000Z"
+    },
+    {
+      "id": "aud-3",
+      "action": "Complaint Resolved",
+      "user": "Marcus Vance",
+      "details": "Resolved feedback fb-101 for Alexander Hayes",
+      "timestamp": "2026-10-09T14:25:00.000Z"
+    },
+    {
+      "id": "aud-4",
+      "action": "Internal Note Added",
+      "user": "Sarah Jenkins",
+      "details": "Added follow-up note to feedback fb-102 (Sophia Lin)",
+      "timestamp": "2026-10-10T10:15:00.000Z"
+    }
+  ]
+}
