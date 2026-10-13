@@ -1101,11 +1101,11 @@ const app = (function () {
       categoryRequired: false
     };
 
+    const targetStatus = document.getElementById('builderStatus')?.value;
     const payload = {
       title: document.getElementById('builderTitle').value.trim(),
       description: document.getElementById('builderDesc').value.trim(),
       locationId: document.getElementById('builderLocation').value || null,
-      status: document.getElementById('builderStatus').value,
       googleReviewUrl: document.getElementById('builderGoogleUrl').value.trim(),
       collegeFieldsConfig,
       allowAnonymous: document.getElementById('cfgAllowAnonymous')?.checked !== false,
@@ -1139,6 +1139,18 @@ const app = (function () {
         body: JSON.stringify(payload)
       });
       currentBuilderForm = res.form;
+
+      // If status changed, transition via explicit lifecycle endpoints (Priority 3)
+      if (targetStatus && targetStatus !== currentBuilderForm.status) {
+        let endpoint = `/api/forms/${currentBuilderForm.id}/publish`;
+        if (targetStatus === 'paused') endpoint = `/api/forms/${currentBuilderForm.id}/pause`;
+        else if (targetStatus === 'archived') endpoint = `/api/forms/${currentBuilderForm.id}/archive`;
+        else if (targetStatus === 'draft') endpoint = `/api/forms/${currentBuilderForm.id}/draft`;
+
+        const transitionRes = await api(endpoint, { method: 'PUT' });
+        currentBuilderForm = transitionRes.form;
+      }
+
       showToast('Form configuration saved successfully!', 'success');
       fetchCommonData();
     } catch (err) {

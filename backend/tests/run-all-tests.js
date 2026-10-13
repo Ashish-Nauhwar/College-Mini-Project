@@ -44,13 +44,14 @@ async function main() {
   console.log('******************************************************');
 
   const suites = [
-    { name: 'Security, RBAC & Isolation', file: 'security-tests.js' },
-    { name: 'NPS & Rating Formula Correctness', file: 'nps-rating-tests.js' },
-    { name: 'Injection Hardening & Validation', file: 'injection-validation-tests.js' },
-    { name: 'College Academic 12-Step E2E Flow', file: 'college-e2e-test.js' },
-    { name: 'Phase 4 Unit Tests (Graph/Analytics/JWT)', file: 'phase4-unit-tests.js' },
-    { name: 'Phase 4 Data Safety & DB Protection', file: 'phase4-data-safety-tests.js' },
-    { name: 'Real MongoDB Atlas Integration', file: 'real-mongo-integration-test.js' }
+    { name: 'Security & Auth Isolation [Isolated Mock DB]', file: 'security-tests.js' },
+    { name: 'NPS & Rating Formula Correctness [Isolated Mock DB]', file: 'nps-rating-tests.js' },
+    { name: 'Injection Hardening & Validation [Isolated Mock DB]', file: 'injection-validation-tests.js' },
+    { name: 'College Academic 12-Step E2E Flow [Isolated Mock DB]', file: 'college-e2e-test.js' },
+    { name: 'Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]', file: 'phase4-unit-tests.js' },
+    { name: 'Phase 4 Data Safety & DB Protection [Safety Unit Tests]', file: 'phase4-data-safety-tests.js' },
+    { name: 'Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]', file: 'phase5-rbac-lifecycle-tests.js' },
+    { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' }
   ];
 
   const results = [];

@@ -53,7 +53,16 @@ function extractDbNameFromUri(uri) {
 }
 
 async function seed(options = {}) {
-  const uri = options.uri || process.env.TEST_MONGODB_URI || process.env.MONGODB_URI;
+  // PRIORITY 1: Strictly refuse to execute demo seeding in production
+  if (process.env.NODE_ENV === 'production') {
+    const err = '[SAFETY REFUSAL] Demo seed script is strictly forbidden in production mode (NODE_ENV=production). Use the secure bootstrap-superadmin CLI tool to provision initial administrative accounts.';
+    console.error(err);
+    if (require.main === module) process.exit(1);
+    throw new Error(err);
+  }
+
+  // Precedence: explicit options.uri -> SEED_MONGODB_URI -> MONGODB_URI (never let TEST_MONGODB_URI override during standard seeding)
+  const uri = options.uri || process.env.SEED_MONGODB_URI || process.env.MONGODB_URI;
   const allowDestructive = options.allowDestructive !== undefined
     ? Boolean(options.allowDestructive)
     : process.env.ALLOW_DESTRUCTIVE_SEED === 'true';
@@ -203,13 +212,13 @@ async function seed(options = {}) {
 
   // 4. Users (Deterministic Upsert - NEVER overwrite existing passwords!)
   const passwordHash = await hashPassword('Password@123');
-  const adminPasswordHash = await hashPassword('Admin@123');
 
   const demoUsers = [
     { email: 'sarah@apexinstitute.edu.in', name: 'Dr. Sarah Jenkins', role: 'owner', businessId: collegeBiz._id, avatar: '👩‍🏫', defaultHash: passwordHash },
+    { email: 'dean@apexinstitute.edu.in', name: 'Prof. Anil Gupta', role: 'college_admin', businessId: collegeBiz._id, avatar: '👨‍🏫', defaultHash: passwordHash },
+    { email: 'staff@apexinstitute.edu.in', name: 'Rita Roy', role: 'staff', businessId: collegeBiz._id, avatar: '👩‍💼', defaultHash: passwordHash },
     { email: 'sarah@apexcafe.com', name: 'Sarah Jenkins', role: 'owner', businessId: cafeBiz._id, avatar: '👩‍💼', defaultHash: passwordHash },
-    { email: 'marcus@apexcafe.com', name: 'Marcus Vance', role: 'manager', businessId: cafeBiz._id, avatar: '👨‍💼', defaultHash: passwordHash },
-    { email: 'admin@feedbackhub.com', name: 'System Super Admin', role: 'superadmin', businessId: null, avatar: '🛡️', defaultHash: adminPasswordHash }
+    { email: 'marcus@apexcafe.com', name: 'Marcus Vance', role: 'manager', businessId: cafeBiz._id, avatar: '👨‍💼', defaultHash: passwordHash }
   ];
 
   for (const u of demoUsers) {

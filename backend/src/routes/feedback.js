@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 // Helper to strictly validate calendar dates (rejects Feb 31, Apr 31, invalid leaps, etc.)
 function isValidCalendarDate(str) {
@@ -562,7 +562,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // GET /api/feedback/export/csv (Authenticated - Multi-Tenant Scoped CSV Export)
-router.get('/export/csv', requireAuth, async (req, res) => {
+router.get('/export/csv', requireAuth, requireRole('owner', 'college_admin', 'manager', 'superadmin'), async (req, res) => {
   try {
     const businessId = req.user.role === 'superadmin' && req.query.businessId
       ? req.query.businessId
@@ -663,7 +663,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // PATCH /api/feedback/:id/status (Authenticated - Multi-Tenant Protected)
-router.patch('/:id/status', requireAuth, async (req, res) => {
+router.patch('/:id/status', requireAuth, requireRole('owner', 'college_admin', 'manager', 'superadmin'), async (req, res) => {
   try {
     const { status } = req.body;
     if (!['new', 'in_review', 'resolved'].includes(status)) {
@@ -703,7 +703,7 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
 });
 
 // PATCH /api/feedback/:id/priority (Authenticated - Multi-Tenant Protected)
-router.patch('/:id/priority', requireAuth, async (req, res) => {
+router.patch('/:id/priority', requireAuth, requireRole('owner', 'college_admin', 'manager', 'superadmin'), async (req, res) => {
   try {
     const { priority } = req.body;
     if (!['low', 'medium', 'urgent', 'critical'].includes(priority)) {
@@ -793,7 +793,7 @@ router.post('/:id/notes', requireAuth, async (req, res) => {
 });
 
 // POST /api/feedback/:id/resolve (Authenticated - Multi-Tenant Protected)
-router.post('/:id/resolve', requireAuth, async (req, res) => {
+router.post('/:id/resolve', requireAuth, requireRole('owner', 'college_admin', 'manager', 'superadmin'), async (req, res) => {
   try {
     const { resolutionNotes } = req.body;
     const fb = await db.getFeedbackById(req.params.id);

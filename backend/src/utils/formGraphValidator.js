@@ -1,7 +1,15 @@
 /**
  * FeedbackHub Form Question Graph & Conditional Validator
- * Implements full dependency graph cycle detection (A->B->A, A->B->C->A, etc.),
- * strict operator validation (no silent fallbacks), and numeric comparison checks.
+ * Implements:
+ * 1. Dependency graph cycle detection via DFS (A->B->A, A->B->C->A, etc.)
+ * 2. Strict operator validation (no silent fallbacks)
+ * 3. Enforced boundary checks:
+ *    - Rejects empty question lists (form must have at least 1 question)
+ *    - Enforces stable unique IDs (/^[a-zA-Z0-9_-]{1,64}$/)
+ *    - Enforces rating bounds: integer only, 1 <= min < max <= 5
+ *    - Enforces NPS bounds: standard 0-10 integer scale
+ *    - Caps options lists: max 50 options per question, max 200 chars per option
+ *    - Rejects non-finite numbers (NaN, Infinity, -Infinity)
  */
 
 const ALLOWED_OPERATORS = ['equals', 'not_equals', 'in', 'greater_than', 'less_than', 'contains'];
@@ -17,14 +25,15 @@ const ALLOWED_QUESTION_TYPES = [
  * @returns {{ error: string | null, questions: Array<Object> }}
  */
 function validateQuestionGraph(rawQuestions) {
-  if (!Array.isArray(rawQuestions)) {
-    return { error: null, questions: [] };
+  // PRIORITY 4: Reject non-array or empty question list
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+    return { error: 'Form must contain at least one question', questions: [] };
   }
 
   const idSet = new Set();
   const sanitized = [];
 
-  // Pass 1: Validate question schema, types, and assign IDs
+  // Pass 1: Validate question schema, types, bounds, and assign/validate IDs
   for (let idx = 0; idx < rawQuestions.length; idx++) {
     const q = rawQuestions[idx];
     if (!q || typeof q !== 'object') {
@@ -41,22 +50,64 @@ function validateQuestionGraph(rawQuestions) {
       return { error: `Invalid question type "${q.type}" for question #${idx + 1}` };
     }
 
-    let qId = q.id && typeof q.id === 'string' ? q.id.trim() : '';
+    // Stable Unique ID Validation
     const safeIdRegex = /^[a-zA-Z0-9_-]{1,64}$/;
-    if (!qId || !safeIdRegex.test(qId) || idSet.has(qId)) {
+    let qId = '';
+    if (q.id !== undefined && q.id !== null) {
+      qId = String(q.id).trim();
+      if (!safeIdRegex.test(qId)) {
+        return { error: `Invalid question ID "${q.id}" for question #${idx + 1}. IDs must match /^[a-zA-Z0-9_-]{1,64}$/` };
+      }
+      if (idSet.has(qId)) {
+        return { error: `Duplicate question ID "${qId}" found in form definition` };
+      }
+    } else {
       qId = `q_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
     }
     idSet.add(qId);
 
+    // Option lists and caps
     let options = [];
     if (['choice', 'select', 'checkbox'].includes(type)) {
-      options = Array.isArray(q.options)
-        ? q.options.map(opt => String(opt).trim()).filter(Boolean)
-        : [];
+      if (!Array.isArray(q.options)) {
+        return { error: `Question "${text}" of type "${type}" must have an array of options` };
+      }
+      options = q.options.map(opt => String(opt).trim()).filter(Boolean);
       if (options.length === 0) {
         return { error: `Question "${text}" of type "${type}" must have at least one valid option` };
       }
+      if (options.length > 50) {
+        return { error: `Question "${text}" cannot exceed 50 options (has ${options.length})` };
+      }
+      for (const opt of options) {
+        if (opt.length > 200) {
+          return { error: `Option "${opt.substring(0, 30)}..." in question "${text}" exceeds 200 characters` };
+        }
+      }
     }
+
+    // Rating & NPS Scale Bounds Validation
+    let min = q.min;
+    let max = q.max;
+
+    if (type === 'rating') {
+      min = min !== undefined && min !== null ? min : 1;
+      max = max !== undefined && max !== null ? max : 5;
+      if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max > 5 || min >= max) {
+        return { error: `Rating question "${text}" must have integer bounds where 1 <= min < max <= 5 (received min=${min}, max=${max})` };
+      }
+    } else if (type === 'nps') {
+      min = min !== undefined && min !== null ? min : 0;
+      max = max !== undefined && max !== null ? max : 10;
+      if (!Number.isInteger(min) || !Number.isInteger(max) || min !== 0 || max !== 10) {
+        return { error: `NPS question "${text}" must have standard 0-10 integer scale (received min=${min}, max=${max})` };
+      }
+    } else {
+      min = typeof min === 'number' && Number.isFinite(min) ? min : 0;
+      max = typeof max === 'number' && Number.isFinite(max) ? max : 100;
+    }
+
+    const order = typeof q.order === 'number' && Number.isFinite(q.order) ? q.order : idx;
 
     sanitized.push({
       id: qId,
@@ -65,11 +116,11 @@ function validateQuestionGraph(rawQuestions) {
       description: q.description ? String(q.description).trim() : '',
       placeholder: q.placeholder ? String(q.placeholder).trim() : '',
       required: Boolean(q.required),
-      min: typeof q.min === 'number' ? q.min : (type === 'nps' ? 0 : 1),
-      max: typeof q.max === 'number' ? q.max : (type === 'nps' ? 10 : 5),
+      min,
+      max,
       options,
       multiline: Boolean(q.multiline),
-      order: typeof q.order === 'number' ? q.order : idx,
+      order,
       rawConditional: q.conditional || null
     });
   }
@@ -121,6 +172,11 @@ function validateQuestionGraph(rawQuestions) {
             error: `Conditional operator "in" for question "${q.text}" requires a non-empty array of candidate values`
           };
         }
+        if (val.length > 50) {
+          return {
+            error: `Conditional operator "in" for question "${q.text}" cannot exceed 50 candidate values`
+          };
+        }
       }
 
       q.conditional = {
@@ -135,7 +191,6 @@ function validateQuestionGraph(rawQuestions) {
   }
 
   // Pass 3: Full Dependency Graph Cycle Detection (A->B->A, A->B->C->A, etc.)
-  // We represent graph edges where edge child -> parent indicates child depends on parent.
   const state = new Map(); // id -> 0: UNVISITED, 1: VISITING, 2: VISITED
   sanitized.forEach(q => state.set(q.id, 0));
 

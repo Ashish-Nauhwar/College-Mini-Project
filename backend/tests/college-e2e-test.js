@@ -231,13 +231,12 @@ async function runCollegeE2EScenario() {
     // Step 5: Explicitly Publish the Form
     // -------------------------------------------------------------
     console.log('\n--- Step 5: Explicitly Publish Form ---');
-    const publishRes = await fetch(`${baseUrl}/api/forms/${formId}`, {
+    const publishRes = await fetch(`${baseUrl}/api/forms/${formId}/publish`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${collegeToken}`
-      },
-      body: JSON.stringify({ status: 'published' })
+      }
     });
     assert.strictEqual(publishRes.status, 200);
     const updatedForm = (await publishRes.json()).form;

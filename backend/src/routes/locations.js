@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 // GET /api/locations (Authenticated - Multi-Tenant Scoped)
 router.get('/', requireAuth, async (req, res) => {
@@ -34,7 +34,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // POST /api/locations (Authenticated - Multi-Tenant Scoped)
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireRole('owner', 'college_admin', 'manager', 'superadmin'), async (req, res) => {
   try {
     const { name, code, address, phone, manager } = req.body;
     if (!name || !name.trim()) {
@@ -78,7 +78,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // PUT /api/locations/:id (Authenticated - Multi-Tenant Protected)
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAuth, requireRole('owner', 'college_admin', 'manager', 'superadmin'), async (req, res) => {
   try {
     const loc = await db.getLocationById(req.params.id);
     if (!loc) {
@@ -122,7 +122,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/locations/:id (Authenticated - Multi-Tenant Protected)
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), async (req, res) => {
   try {
     const loc = await db.getLocationById(req.params.id);
     if (!loc) {

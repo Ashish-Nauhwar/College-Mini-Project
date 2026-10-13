@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 // GET /api/forms/templates (Starter Form Templates)
 router.get('/templates', requireAuth, (req, res) => {
@@ -419,7 +419,7 @@ function validateAndSanitizeQuestions(rawQuestions) {
 }
 
 // POST /api/forms (Authenticated - Multi-Tenant Scoped)
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), async (req, res) => {
   try {
     const {
       title,
@@ -510,8 +510,16 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
+// Defined legal state machine transitions (Priority 3)
+const LEGAL_TRANSITIONS = {
+  draft: ['published', 'archived'],
+  published: ['paused', 'archived'],
+  paused: ['published', 'archived'],
+  archived: ['draft']
+};
+
 // PUT /api/forms/:id (Authenticated - Multi-Tenant Protected)
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), async (req, res) => {
   try {
     const form = await db.getFormById(req.params.id);
     if (!form) {
@@ -538,6 +546,13 @@ router.put('/:id', requireAuth, async (req, res) => {
       allowAnonymous
     } = req.body;
 
+    // UNBYPASSABLE LIFECYCLE: Reject status mutation via general update
+    if (status !== undefined && status !== form.status) {
+      return res.status(400).json({
+        error: 'Form status cannot be modified via general update. Please use explicit lifecycle transition endpoints (/publish, /pause, /resume, /archive).'
+      });
+    }
+
     const updates = {};
     if (title !== undefined) {
       if (!title || !title.trim()) {
@@ -556,12 +571,6 @@ router.put('/:id', requireAuth, async (req, res) => {
       } else {
         updates.locationId = null;
       }
-    }
-    if (status !== undefined) {
-      if (!['draft', 'published', 'paused', 'archived'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid form status' });
-      }
-      updates.status = status;
     }
     if (formType) updates.formType = formType;
     if (googleReviewUrl !== undefined) updates.googleReviewUrl = googleReviewUrl.trim();
@@ -600,7 +609,7 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// State transition helper
+// State transition helper with state machine and full definition validation
 async function handleStateTransition(req, res, targetStatus, actionName) {
   try {
     const form = await db.getFormById(req.params.id);
@@ -616,6 +625,29 @@ async function handleStateTransition(req, res, targetStatus, actionName) {
     }
 
     const previousStatus = form.status;
+
+    // Enforce legal lifecycle transitions
+    const allowedTargets = LEGAL_TRANSITIONS[previousStatus] || [];
+    if (!allowedTargets.includes(targetStatus)) {
+      return res.status(400).json({
+        error: `Invalid status transition from "${previousStatus}" to "${targetStatus}". Allowed transitions: ${allowedTargets.join(', ') || 'none'}.`
+      });
+    }
+
+    // Comprehensive validation prior to publication
+    if (targetStatus === 'published') {
+      if (!form.title || !form.title.trim()) {
+        return res.status(400).json({ error: 'Cannot publish form: Form title is missing or empty' });
+      }
+      if (!Array.isArray(form.questions) || form.questions.length === 0) {
+        return res.status(400).json({ error: 'Cannot publish form: A form must contain at least one question' });
+      }
+      const qValidation = validateQuestionGraph(form.questions);
+      if (qValidation.error) {
+        return res.status(400).json({ error: `Cannot publish form: ${qValidation.error}` });
+      }
+    }
+
     const updated = await db.updateForm(req.params.id, { status: targetStatus });
     await db.logAudit(
       actionName,
@@ -640,29 +672,34 @@ async function handleStateTransition(req, res, targetStatus, actionName) {
   }
 }
 
-// Explicit State Transition Endpoints (Priority 7)
+// Explicit State Transition Endpoints (Priority 3 & Priority 2 Protected)
 // PUT /api/forms/:id/publish
-router.put('/:id/publish', requireAuth, (req, res) => {
+router.put('/:id/publish', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), (req, res) => {
   return handleStateTransition(req, res, 'published', 'Form Published');
 });
 
 // PUT /api/forms/:id/pause
-router.put('/:id/pause', requireAuth, (req, res) => {
+router.put('/:id/pause', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), (req, res) => {
   return handleStateTransition(req, res, 'paused', 'Form Paused');
 });
 
 // PUT /api/forms/:id/resume
-router.put('/:id/resume', requireAuth, (req, res) => {
+router.put('/:id/resume', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), (req, res) => {
   return handleStateTransition(req, res, 'published', 'Form Resumed');
 });
 
 // PUT /api/forms/:id/archive
-router.put('/:id/archive', requireAuth, (req, res) => {
+router.put('/:id/archive', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), (req, res) => {
   return handleStateTransition(req, res, 'archived', 'Form Archived');
 });
 
+// PUT /api/forms/:id/draft
+router.put('/:id/draft', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), (req, res) => {
+  return handleStateTransition(req, res, 'draft', 'Form Moved to Draft');
+});
+
 // DELETE /api/forms/:id (Authenticated - Multi-Tenant Protected)
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), async (req, res) => {
   try {
     const form = await db.getFormById(req.params.id);
     if (!form) {

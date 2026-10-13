@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { comparePassword, hashPassword } = require('../utils/crypto');
 const db = require('../db');
-const { generateToken, requireAuth } = require('../middleware/auth');
+const { generateToken, requireAuth, requireRole } = require('../middleware/auth');
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -70,8 +70,12 @@ router.post('/switch-demo', async (req, res) => {
   let targetEmail = 'sarah@apexcafe.com'; // default owner
   if (role === 'manager') {
     targetEmail = 'marcus@apexcafe.com';
-  } else if (role === 'college') {
+  } else if (role === 'college' || role === 'owner_college') {
     targetEmail = 'sarah@apexinstitute.edu.in';
+  } else if (role === 'college_admin') {
+    targetEmail = 'dean@apexinstitute.edu.in';
+  } else if (role === 'staff') {
+    targetEmail = 'staff@apexinstitute.edu.in';
   }
 
   try {
@@ -403,7 +407,7 @@ router.get('/me', requireAuth, async (req, res) => {
 });
 
 // PUT /api/auth/business-settings (Update Business Profile & Academic Config)
-router.put('/business-settings', requireAuth, async (req, res) => {
+router.put('/business-settings', requireAuth, requireRole('owner', 'college_admin', 'superadmin'), async (req, res) => {
   try {
     const { name, category, email, phone, address, isOnlineOnly, googleReviewUrl, academicConfig } = req.body;
 

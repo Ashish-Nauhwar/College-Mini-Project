@@ -114,14 +114,33 @@ npm start
 
 ---
 
-## 🛠️ Dynamic Form Builder & Academic Workflows
+### Role-Based Access Control (RBAC) Permission Matrix (Phase 5)
 
-### 12 Supported Question Types
-1. **Rating Control** (`rating`): Large, accessible 5-star touch controls (1–5 scale).
-2. **Net Promoter Score** (`nps`): Standard 0–10 advocacy scale.
-3. **Multiple Choice** (`choice`): Single-select choices with required options.
-4. **Dropdown Select** (`select`): Accessible dropdown selector.
-5. **Checkboxes** (`checkbox`): Multi-select options.
+| Resource / Action | Owner | College Admin | Manager | Staff | Superadmin |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Create Form** (`POST /api/forms`) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Edit Form** (`PUT /api/forms/:id`) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Publish / Pause / Archive Form** | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Delete Form** (`DELETE /api/forms/:id`) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Edit Business Settings** (`PUT /api/auth/business-settings`) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Create & Edit Locations** (`POST/PUT /api/locations`) | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **Delete Location** (`DELETE /api/locations/:id`) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Resolve Complaints** (`POST /api/feedback/:id/resolve`) | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **Change Feedback Status / Priority** | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **Export Feedback CSV** (`GET /api/feedback/export/csv`) | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **Add Internal Notes** (`POST /api/feedback/:id/notes`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **View Feedback Inbox** (`GET /api/feedback`) | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+## 🛠️ Dynamic Form Builder & Publishing Lifecycle
+
+### 12 Supported Question Types & Strict Validation Boundaries
+1. **Rating Control** (`rating`): Strict integer bounds where $1 \le \min < \max \le 5$. Malicious payloads rendering arbitrary numbers of stars or non-integer steps are rejected.
+2. **Net Promoter Score** (`nps`): Standard 0–10 advocacy scale ($\min: 0$, $\max: 10$).
+3. **Multiple Choice** (`choice`): Single-select choices capped at 50 options, max 200 characters per option string.
+4. **Dropdown Select** (`select`): Accessible dropdown selector with max 50 options, max 200 characters per option.
+5. **Checkboxes** (`checkbox`): Multi-select options with max 50 options.
 6. **Yes / No Toggle** (`yesno`): Strict boolean toggle with verified Yes/No persistence.
 7. **Short Text** (`text`): Single-line text input (up to 500 characters).
 8. **Multiline Comment** (`multiline`): Responsive auto-resizing comment box (up to 3000 characters).
@@ -130,20 +149,30 @@ npm start
 11. **Numeric Value** (`number`): Strict `Number.isFinite` validation.
 12. **Date Picker** (`date`): Strict calendar date validation (rejecting non-calendar dates such as February 31).
 
+### Unbypassable Form Publishing Lifecycle
+* **Draft by Default**: `POST /api/forms` unconditionally initializes forms in `draft` status regardless of the client payload.
+* **General Update Guard**: `PUT /api/forms/:id` strictly rejects `status` changes with `HTTP 400`, preventing lifecycle bypass.
+* **Enforced State Machine Transitions**:
+  * `draft` $\to$ `published`, `archived`
+  * `published` $\to$ `paused`, `archived`
+  * `paused` $\to$ `published`, `archived`
+  * `archived` $\to$ `draft`
+  * Illegal transitions (e.g. attempting to pause a `draft` form) return `HTTP 400`.
+* **Pre-Publication Definition Verification**:
+  Before transitioning to `published`, the backend validates the complete form definition:
+  1. Title cannot be empty.
+  2. Question list must contain at least 1 question.
+  3. Stable unique question IDs matching `/^[a-zA-Z0-9_-]{1,64}$/`.
+  4. Bounds validation ($1 \le \text{rating} \le 5$, $0 \le \text{NPS} \le 10$).
+  5. Option list bounds ($\le 50$ options, $\le 200$ chars).
+  6. Acyclic conditional dependency verification via Depth-First Search (DFS).
+  Publishing incomplete or malformed forms returns `HTTP 400`.
+
 ### Dependency Graph Cycle Detection
-* **Acyclic Validation**: Form creation and updates validate the question dependency graph using Depth-First Search (DFS) with 3-color cycle detection.
-* Detects self-references ($A \to A$), 2-node cycles ($A \to B \to A$), and transitive loops ($A \to B \to C \to A$) before saving.
+* **Acyclic Validation**: Form creation, editing, and publishing validate the question dependency graph using Depth-First Search (DFS) with 3-color cycle detection.
+* Detects self-references ($A \to A$), 2-node cycles ($A \to B \to A$), and transitive loops ($A \to B \to C \to A$).
 * **Strict Operators**: Rejects invalid operators without silent fallbacks (`equals`, `not_equals`, `in`, `greater_than`, `less_than`, `contains`).
 * Requires valid finite numbers for `greater_than` and `less_than` comparisons.
-
-### Form Lifecycle & State Transitions
-* Forms default to `draft` upon creation.
-* Public feedback submissions are blocked on non-published forms (`403 Forbidden`).
-* Dedicated lifecycle transition endpoints:
-  * `PUT /api/forms/:id/publish`
-  * `PUT /api/forms/:id/pause`
-  * `PUT /api/forms/:id/resume`
-  * `PUT /api/forms/:id/archive`
 
 ### Institutional Academic Master Data
 * **No Hardcoded Fallbacks**: Dropdown choices for academic years, semesters, sections, faculty, and subjects are dynamically derived from the institution's `academicConfig`.
@@ -174,40 +203,29 @@ Executes all automated suites with full summary reporting:
 ======================================================
               AUTOMATED VERIFICATION SUMMARY          
 ======================================================
-1. Security, RBAC & Isolation                : PASS ✓
-2. NPS & Rating Formula Correctness          : PASS ✓
-3. Injection Hardening & Validation          : PASS ✓
-4. College Academic 12-Step E2E Flow         : PASS ✓
-5. Phase 4 Unit Tests (Graph/Analytics/JWT)  : PASS ✓
-6. Phase 4 Data Safety & DB Protection       : PASS ✓
-7. Real MongoDB Atlas Integration            : SKIPPED (no TEST_MONGODB_URI configured)
+1. Security & Auth Isolation [Isolated Mock DB]: PASS ✓
+2. NPS & Rating Formula Correctness [Isolated Mock DB]: PASS ✓
+3. Injection Hardening & Validation [Isolated Mock DB]: PASS ✓
+4. College Academic 12-Step E2E Flow [Isolated Mock DB]: PASS ✓
+5. Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]: PASS ✓
+6. Phase 4 Data Safety & DB Protection [Safety Unit Tests]: PASS ✓
+7. Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]: PASS ✓
+8. Real MongoDB Atlas Integration [Live Database]: SKIPPED (no TEST_MONGODB_URI configured)
 ======================================================
 ```
 
 ### Individual Test Suites
 ```bash
-# 1. Security, RBAC & Multi-Tenant Isolation (Ephemeral Server port 0)
+# 1. Master Suite (All 8 Suites)
+npm test
+
+# 2. Phase 5 RBAC, Lifecycle & Production Safety
+npm run test:phase5
+
+# 3. Security, RBAC & Multi-Tenant Isolation
 npm run test:security
 
-# 2. NPS & Star Rating Formula Correctness (Imports real production helpers)
-npm run test:nps
-
-# 3. Injection Hardening & Input Sanitization
-npm run test:injection
-
-# 4. College Academic 12-Step Scenario Flow
-npm run test:college
-
-# 5. Phase 4 Unit Tests (Graph Cycle Detection, Complaints Helper, JWT Validator)
-npm run test:unit
-
-# 6. Phase 4 Data Safety & Database Protection (Non-destructive seeding enforcement)
-npm run test:safety
-
-# 7. Real MongoDB Atlas Integration (Runs when TEST_MONGODB_URI is provided)
-npm run test:integration
-
-# 8. Multi-Device Responsive UI Verification (320px - 1440px)
+# 4. Multi-Device Responsive UI Verification (320px - 1440px)
 npm run test:responsive
 ```
 
