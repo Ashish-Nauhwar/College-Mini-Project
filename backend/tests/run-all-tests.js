@@ -51,6 +51,7 @@ async function main() {
     { name: 'Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]', file: 'phase4-unit-tests.js' },
     { name: 'Phase 4 Data Safety & DB Protection [Safety Unit Tests]', file: 'phase4-data-safety-tests.js' },
     { name: 'Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]', file: 'phase5-rbac-lifecycle-tests.js' },
+    { name: 'Phase 7 Signup & Routing Resilience [App & DB Check]', file: 'phase7-signup-routing-tests.js' },
     { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' }
   ];
 

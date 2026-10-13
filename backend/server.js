@@ -2,11 +2,18 @@ const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-// Load environment configuration from backend/.env
-const envPath = path.join(__dirname, '.env');
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-  console.log(`[ENV] Successfully loaded configuration from: ${envPath}`);
+// Robust environment detection: check backend/.env first, then root .env
+const envPathBackend = path.join(__dirname, '.env');
+const envPathRoot = path.join(__dirname, '..', '.env');
+let activeEnvPath = null;
+if (fs.existsSync(envPathBackend)) {
+  activeEnvPath = envPathBackend;
+} else if (fs.existsSync(envPathRoot)) {
+  activeEnvPath = envPathRoot;
+}
+
+if (activeEnvPath) {
+  dotenv.config({ path: activeEnvPath });
 } else {
   dotenv.config();
 }
@@ -80,15 +87,17 @@ const submitLimiter = createSlidingWindowLimiter({ windowMs: 60000, max: 45, mes
 // Serve static frontend assets
 app.use(express.static(FRONTEND_DIR));
 
-// Health check endpoint (Distinguishes running process from database readiness)
+// Health check endpoint (Accurately reports database readiness; returns 503 if disconnected)
 app.get('/api/health', (req, res) => {
   const ready = isDbConnected();
-  return res.status(200).json({
-    status: 'healthy',
+  const statusCode = ready ? 200 : 503;
+  return res.status(statusCode).json({
+    status: ready ? 'healthy' : 'degraded',
     ready,
     database: ready ? 'connected' : 'disconnected',
     uptime: `${Math.floor(process.uptime())}s`,
-    environment: NODE_ENV
+    environment: NODE_ENV,
+    pid: process.pid
   });
 });
 
@@ -132,15 +141,38 @@ app.use((err, req, res, next) => {
 // Start Server
 if (require.main === module) {
   (async () => {
+    console.log(`\n===============================================================`);
+    console.log(`[Startup] Initializing FeedbackHub Application Server`);
+    console.log(`[Startup] Process ID: ${process.pid}`);
+    console.log(`[Startup] Configured Port: ${PORT}`);
+    console.log(`[Startup] Environment File: ${activeEnvPath || 'System environment (no .env file found)'}`);
+    console.log(`[Startup] MongoDB URI: ${process.env.MONGODB_URI ? 'Configured' : 'NOT CONFIGURED'}`);
+
     // Attempt MongoDB connection
     const dbConnected = await connectDB();
+    console.log(`[Startup] Database Readiness: ${dbConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+    console.log(`===============================================================\n`);
+
     if (!dbConnected && NODE_ENV === 'production') {
       console.error('[CRITICAL] Production server cannot start without an active MongoDB connection. Exiting.');
       process.exit(1);
     }
 
-    app.listen(PORT, () => {
-      console.log(`FeedbackHub server running at http://localhost:${PORT} (ENV: ${NODE_ENV}, DB: ${dbConnected ? 'CONNECTED' : 'STANDBY'})`);
+    const server = app.listen(PORT, () => {
+      console.log(`FeedbackHub server successfully running at http://localhost:${PORT} [PID: ${process.pid}] (ENV: ${NODE_ENV}, DB: ${isDbConnected() ? 'CONNECTED' : 'STANDBY'})`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('\n===============================================================');
+        console.error(` [FATAL] Port ${PORT} is already occupied by another process.`);
+        console.error(` Another Node.js instance is already listening on port ${PORT}.`);
+        console.error(` Terminate the conflicting process or set PORT in backend/.env`);
+        console.error('===============================================================\n');
+        process.exit(1);
+      }
+      console.error('[Server Error]:', err);
+      process.exit(1);
     });
   })();
 }

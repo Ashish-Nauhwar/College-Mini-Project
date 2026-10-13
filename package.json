@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "node --watch backend/server.js",
+    "server": "node backend/server.js",
+    "server.js": "node backend/server.js",
     "test": "node backend/tests/run-all-tests.js",
     "test:security": "node backend/tests/security-tests.js",
     "test:nps": "node backend/tests/nps-rating-tests.js",
@@ -14,8 +16,10 @@
     "test:unit": "node backend/tests/phase4-unit-tests.js",
     "test:safety": "node backend/tests/phase4-data-safety-tests.js",
     "test:phase5": "node backend/tests/phase5-rbac-lifecycle-tests.js",
+    "test:phase7": "node backend/tests/phase7-signup-routing-tests.js",
     "test:integration": "node backend/tests/real-mongo-integration-test.js",
     "test:responsive": "node backend/tests/cdp-responsive-test.js",
+    "diagnose": "node backend/scripts/diagnose.js",
     "seed": "node backend/scripts/seed.js",
     "migrate:mongo": "node backend/scripts/migrate-json-to-mongo.js",
     "bootstrap:superadmin": "node backend/scripts/bootstrap-superadmin.js"

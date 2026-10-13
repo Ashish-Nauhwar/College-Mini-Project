@@ -49,7 +49,11 @@ const app = (function () {
     const res = await fetch(endpoint, { ...options, headers });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.error || 'Server request failed');
+      const err = new Error(data.error || 'Server request failed');
+      err.status = res.status;
+      err.statusCode = res.status;
+      err.code = data.code;
+      throw err;
     }
     return data;
   }
@@ -86,10 +90,10 @@ const app = (function () {
   function navigate(viewName) {
     closeMobileDrawer();
 
-    // If unauthenticated and trying to access protected views
+    // If unauthenticated and trying to access protected views, redirect cleanly to login
     if (!token && !['landing', 'login', 'register'].includes(viewName)) {
       window.location.hash = '#/login';
-      return;
+      viewName = 'login';
     }
 
     // Hide all views
@@ -106,9 +110,16 @@ const app = (function () {
       }
     });
 
-    // Show target view
-    const targetView = views[viewName] || views.dashboard;
-    if (targetView) targetView.classList.remove('hidden');
+    // Show target view (fallback to login if unauthenticated, or landing)
+    let targetView = views[viewName];
+    if (!targetView) {
+      targetView = token ? views.dashboard : views.landing;
+      viewName = token ? 'dashboard' : 'landing';
+    }
+
+    if (targetView) {
+      targetView.classList.remove('hidden');
+    }
 
     // Update header & page specific logic
     const titles = {
@@ -141,22 +152,66 @@ const app = (function () {
   }
 
   function handleRoute() {
-    const hash = window.location.hash.replace('#/', '').split('?')[0] || (token ? 'dashboard' : 'landing');
-    navigate(hash);
+    const rawHash = (window.location.hash || '').replace('#/', '').split('?')[0];
+    const targetHash = rawHash || (token ? 'dashboard' : 'landing');
+    navigate(targetHash);
+  }
+
+  // --- Outage Recovery Banner ---
+  function showOutageBanner(message) {
+    let banner = document.getElementById('dbOutageBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'dbOutageBanner';
+      banner.style.cssText = 'background:#fef2f2; border:1px solid #f87171; color:#991b1b; padding:12px 16px; border-radius:8px; margin:16px auto; max-width:600px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:0.9rem;';
+      banner.innerHTML = `
+        <div style="flex:1;">
+          <strong>Database Connection Unavailable</strong>
+          <div style="font-size:0.8rem; color:#b91c1c; margin-top:2px;">${escapeHtml(message || 'The backend cannot connect to MongoDB. Please ensure MONGODB_URI is set correctly in backend/.env.')}</div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="btnRetryOutage" style="white-space:nowrap;">Retry 🔄</button>
+      `;
+      const mainContent = document.getElementById('mainContent');
+      if (mainContent) mainContent.prepend(banner);
+      document.getElementById('btnRetryOutage')?.addEventListener('click', async () => {
+        banner.remove();
+        showToast('Retrying connection...', 'info');
+        await initSession();
+      });
+    }
+  }
+
+  // --- Demo Mode Status Check ---
+  async function checkDemoMode() {
+    try {
+      const res = await api('/api/auth/demo-status');
+      if (res && res.demoEnabled === false) {
+        // Hide demo switch buttons if disabled
+        document.querySelectorAll('.demo-switch-container, [data-demo-control]').forEach(el => {
+          el.style.display = 'none';
+        });
+      }
+    } catch (e) {
+      // Non-fatal
+    }
   }
 
   // --- Auth & Session ---
   async function initSession() {
+    await checkDemoMode();
+
+    // 1. Unauthenticated Visitor Flow: Never auto-login or leave blank
     if (!token) {
-      // Default to Sarah (Owner demo) if opening dashboard directly
-      if (window.location.hash && !['#/login', '#/register', '#/landing'].includes(window.location.hash)) {
-        await switchDemo('owner');
-        return;
+      const currentHash = window.location.hash;
+      // If opening a protected route without token, redirect to login
+      if (currentHash && !['#/login', '#/register', '#/landing', ''].includes(currentHash)) {
+        window.location.hash = '#/login';
       }
       handleRoute();
       return;
     }
 
+    // 2. Existing Token Flow: Validate session with /api/auth/me
     try {
       const data = await api('/api/auth/me');
       currentUser = data.user;
@@ -165,8 +220,21 @@ const app = (function () {
       await fetchCommonData();
       handleRoute();
     } catch (err) {
-      console.warn('Session expired or invalid, logging out:', err);
-      logout();
+      const isOutage = err.status === 503 || (err.message && (
+        err.message.includes('Database connection unavailable') ||
+        err.message.includes('Failed to fetch') ||
+        err.message.includes('NetworkError')
+      ));
+
+      if (isOutage) {
+        console.warn('[Session] Temporary database outage detected:', err.message);
+        // Preserve token! Show recovery banner so user can retry without losing session
+        showOutageBanner(err.message);
+        handleRoute();
+      } else {
+        console.warn('[Session] Token expired or invalid, logging out:', err);
+        logout(false);
+      }
     }
   }
 
@@ -174,8 +242,10 @@ const app = (function () {
     if (role === 'superadmin') {
       showToast('Super Admin access requires manual login with authorized credentials (admin@feedbackhub.com). 1-click elevation is disabled for security.', 'error');
       window.location.hash = '#/login';
+      handleRoute();
       return;
     }
+
     try {
       const data = await api('/api/auth/switch-demo', {
         method: 'POST',
@@ -200,6 +270,11 @@ const app = (function () {
       handleRoute();
     } catch (err) {
       showToast(err.message, 'error');
+      // If demo switch fails, redirect to login screen so UI is never blank
+      if (!token) {
+        window.location.hash = '#/login';
+        handleRoute();
+      }
     }
   }
 
@@ -228,13 +303,15 @@ const app = (function () {
     if (publicLink) publicLink.style.display = 'inline-flex';
   }
 
-  function logout() {
+  function logout(showNotification = true) {
     token = null;
     currentUser = null;
     currentBusiness = null;
     localStorage.removeItem('fh_token');
-    showToast('Logged out successfully', 'info');
-    window.location.hash = '#/landing';
+    if (showNotification) {
+      showToast('Logged out successfully', 'info');
+    }
+    window.location.hash = '#/login';
     handleRoute();
   }
 
@@ -1774,8 +1851,19 @@ const app = (function () {
         const email = document.getElementById('loginEmail').value.trim();
         const password = document.getElementById('loginPassword').value;
         const errEl = document.getElementById('loginError');
+        const submitBtn = loginForm.querySelector('button[type="submit"]');
+        const origBtnText = submitBtn ? submitBtn.textContent : 'Sign In';
 
         try {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing In...';
+          }
+          if (errEl) {
+            errEl.classList.add('hidden');
+            errEl.textContent = '';
+          }
+
           const data = await api('/api/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email, password })
@@ -1784,14 +1872,23 @@ const app = (function () {
           localStorage.setItem('fh_token', token);
           currentUser = data.user;
           currentBusiness = data.business;
-          errEl.classList.add('hidden');
+          if (errEl) errEl.classList.add('hidden');
           showToast(`Welcome back, ${currentUser.name}!`, 'success');
           updateUserUI();
           await fetchCommonData();
           window.location.hash = '#/dashboard';
+          handleRoute();
         } catch (err) {
-          errEl.textContent = err.message;
-          errEl.classList.remove('hidden');
+          if (errEl) {
+            errEl.textContent = err.message || 'Invalid email or password';
+            errEl.classList.remove('hidden');
+          }
+          showToast(err.message || 'Login failed', 'error');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = origBtnText;
+          }
         }
       });
     }
@@ -1820,8 +1917,19 @@ const app = (function () {
         };
 
         const errEl = document.getElementById('regError');
+        const submitBtn = registerForm.querySelector('button[type="submit"]');
+        const origBtnText = submitBtn ? submitBtn.textContent : 'Create Account & Start';
 
         try {
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating Account...';
+          }
+          if (errEl) {
+            errEl.classList.add('hidden');
+            errEl.textContent = '';
+          }
+
           const data = await api('/api/auth/register', {
             method: 'POST',
             body: JSON.stringify({
@@ -1840,14 +1948,23 @@ const app = (function () {
           localStorage.setItem('fh_token', token);
           currentUser = data.user;
           currentBusiness = data.business;
-          errEl.classList.add('hidden');
+          if (errEl) errEl.classList.add('hidden');
           showToast(`Welcome to FeedbackHub, ${ownerName}!`, 'success');
           updateUserUI();
           await fetchCommonData();
           window.location.hash = '#/dashboard';
+          handleRoute();
         } catch (err) {
-          errEl.textContent = err.message;
-          errEl.classList.remove('hidden');
+          if (errEl) {
+            errEl.textContent = err.message || 'Registration failed';
+            errEl.classList.remove('hidden');
+          }
+          showToast(err.message || 'Registration failed', 'error');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = origBtnText;
+          }
         }
       });
     }

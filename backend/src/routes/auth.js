@@ -4,8 +4,20 @@ const { comparePassword, hashPassword } = require('../utils/crypto');
 const db = require('../db');
 const { generateToken, requireAuth, requireRole } = require('../middleware/auth');
 
+// GET /api/auth/demo-status (Public endpoint reporting whether demo accounts are enabled)
+router.get('/demo-status', (req, res) => {
+  const isDemoEnabled = process.env.ENABLE_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
+  return res.json({ demoEnabled: isDemoEnabled });
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
+  if (!db.isDbConnected()) {
+    return res.status(503).json({
+      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.'
+    });
+  }
+
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -50,6 +62,15 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/switch-demo (Developer / Demo Fast Switcher)
 router.post('/switch-demo', async (req, res) => {
+  const { role } = req.body;
+
+  // STRICT SECURITY REQUIREMENT: Never allow public requests to obtain a super-admin token
+  if (role === 'superadmin') {
+    return res.status(403).json({
+      error: 'Super-admin access cannot be acquired through demo switching. Please authenticate using the super-admin credentials on the login page.'
+    });
+  }
+
   const isDemoEnabled = process.env.ENABLE_DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 
   if (!isDemoEnabled) {
@@ -58,12 +79,9 @@ router.post('/switch-demo', async (req, res) => {
     });
   }
 
-  const { role } = req.body;
-
-  // STRICT SECURITY REQUIREMENT: Never allow public requests to obtain a super-admin token
-  if (role === 'superadmin') {
-    return res.status(403).json({
-      error: 'Super-admin access cannot be acquired through demo switching. Please authenticate using the super-admin credentials on the login page.'
+  if (!db.isDbConnected()) {
+    return res.status(503).json({
+      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.'
     });
   }
 
@@ -114,6 +132,17 @@ router.post('/switch-demo', async (req, res) => {
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
+  if (!db.isDbConnected()) {
+    return res.status(503).json({
+      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.'
+    });
+  }
+
+  let createdBusiness = null;
+  let createdUser = null;
+  let createdLocation = null;
+  let createdForm = null;
+
   try {
     const {
       businessName,
@@ -142,6 +171,18 @@ router.post('/register', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Check duplicate email against existing User
+    const existingUser = await db.findUserByEmail(normalizedEmail);
+    if (existingUser) {
+      return res.status(400).json({ error: 'An account with this email address already exists' });
+    }
+
+    // Check duplicate email against existing Business
+    const existingBiz = await db.findBusinessByEmail(normalizedEmail);
+    if (existingBiz) {
+      return res.status(400).json({ error: 'A business registered with this email address already exists' });
+    }
 
     // Validate physical address for physical businesses
     const onlineOnly = Boolean(isOnlineOnly);
@@ -178,11 +219,6 @@ router.post('/register', async (req, res) => {
       };
     }
 
-    const existing = await db.findUserByEmail(normalizedEmail);
-    if (existing) {
-      return res.status(400).json({ error: 'An account with this email address already exists' });
-    }
-
     // Determine type and logo
     const validTypes = ['college', 'coaching', 'restaurant', 'healthcare', 'salon', 'other'];
     const bType = validTypes.includes(businessType) ? businessType : 'other';
@@ -197,7 +233,7 @@ router.post('/register', async (req, res) => {
     };
 
     // 1. Create Business
-    const newBusiness = await db.createBusiness({
+    createdBusiness = await db.createBusiness({
       name: businessName.trim(),
       type: bType,
       category: category ? category.trim() : (bType === 'college' ? 'College / University' : 'General Business'),
@@ -209,13 +245,15 @@ router.post('/register', async (req, res) => {
       active: true
     });
 
+    const bizId = createdBusiness._id || createdBusiness.id;
+
     // 2. Create Owner User
-    const newUser = await db.createUser({
+    createdUser = await db.createUser({
       name: ownerName.trim(),
       email: normalizedEmail,
       password: hashPassword(password),
       role: 'owner',
-      businessId: newBusiness._id,
+      businessId: bizId,
       avatar: bType === 'college' ? '👩‍🏫' : '👤'
     });
 
@@ -224,8 +262,8 @@ router.post('/register', async (req, res) => {
       ? 'Online / Digital Headquarters'
       : `${validatedAddress.addressLine1}, ${validatedAddress.city}, ${validatedAddress.state} - ${validatedAddress.postalCode}`;
 
-    const newLocation = await db.createLocation({
-      businessId: newBusiness._id,
+    createdLocation = await db.createLocation({
+      businessId: bizId,
       name: bType === 'college' ? 'Main Campus' : 'Primary Location',
       code: 'HQ-01',
       address: locationAddress,
@@ -338,9 +376,9 @@ router.post('/register', async (req, res) => {
       ];
     }
 
-    const newForm = await db.createForm({
-      businessId: newBusiness._id,
-      locationId: newLocation._id,
+    createdForm = await db.createForm({
+      businessId: bizId,
+      locationId: createdLocation._id || createdLocation.id,
       slug: formSlug,
       title: `${businessName.trim()} Feedback`,
       description: bType === 'college'
@@ -357,50 +395,83 @@ router.post('/register', async (req, res) => {
       'Business Registered',
       ownerName.trim(),
       `Registered ${businessName} (${bType}) with initial location and form`,
-      newBusiness._id,
+      bizId,
       req.ip
     );
 
-    const token = generateToken(newUser);
+    // Issue authentication token strictly after all records are created successfully
+    const token = generateToken(createdUser);
     return res.status(201).json({
       token,
       user: {
-        id: newUser._id || newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        avatar: newUser.avatar,
-        businessId: newBusiness._id
+        id: createdUser._id || createdUser.id,
+        name: createdUser.name,
+        email: createdUser.email,
+        role: createdUser.role,
+        avatar: createdUser.avatar,
+        businessId: bizId
       },
-      business: newBusiness,
-      firstLocation: newLocation,
-      firstForm: newForm
+      business: createdBusiness,
+      firstLocation: createdLocation,
+      firstForm: createdForm
     });
   } catch (err) {
+    // Compensation rollback: delete any newly created records to avoid orphans
+    if (createdForm) {
+      const fId = createdForm._id || createdForm.id;
+      await db.deleteForm(fId).catch(() => {});
+    }
+    if (createdLocation) {
+      const lId = createdLocation._id || createdLocation.id;
+      await db.deleteLocation(lId).catch(() => {});
+    }
+    if (createdUser) {
+      const uId = createdUser._id || createdUser.id;
+      await db.deleteUser(uId).catch(() => {});
+    }
+    if (createdBusiness) {
+      const bId = createdBusiness._id || createdBusiness.id;
+      await db.deleteBusiness(bId).catch(() => {});
+    }
+
     if (err.statusCode === 503) {
       return res.status(503).json({ error: err.message });
     }
     console.error('[Registration Error]:', err);
-    return res.status(500).json({ error: 'Registration failed due to a server error' });
+    return res.status(500).json({ error: err.message || 'Registration failed due to a server error' });
   }
 });
 
 // GET /api/auth/me
 router.get('/me', requireAuth, async (req, res) => {
+  if (!db.isDbConnected()) {
+    return res.status(503).json({
+      error: 'Database connection unavailable. Please ensure MONGODB_URI is set correctly in backend/.env.',
+      code: 'DB_UNAVAILABLE'
+    });
+  }
+
   try {
-    const business = req.user.businessId ? await db.getBusinessById(req.user.businessId) : null;
+    const user = await db.findUserById(req.user.id || req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: 'User session not found' });
+    }
+    const business = user.businessId ? await db.getBusinessById(user.businessId) : null;
     return res.json({
       user: {
-        id: req.user._id || req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role,
-        avatar: req.user.avatar,
-        businessId: req.user.businessId
+        id: user._id || user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+        businessId: user.businessId
       },
       business
     });
   } catch (err) {
+    if (err.statusCode === 503) {
+      return res.status(503).json({ error: err.message, code: 'DB_UNAVAILABLE' });
+    }
     console.error('[Auth Me Error]:', err);
     return res.status(500).json({ error: 'Failed to fetch current user session' });
   }

@@ -5,9 +5,14 @@
 
 const mongoose = require('mongoose');
 const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('./models');
-const { isDbConnected } = require('./config/db');
+const configDb = require('./config/db');
 
 let mockDbMode = process.env.TEST_MOCK_DB === 'true';
+
+function isDbConnected() {
+  if (mockDbMode) return true;
+  return configDb.isDbConnected();
+}
 const mockStore = {
   users: new Map(),
   businesses: new Map(),
@@ -84,6 +89,18 @@ async function createUser(userData) {
   });
 }
 
+async function deleteUser(id) {
+  checkConnection();
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    mockStore.users.delete(idStr);
+    return { deletedCount: 1 };
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  return User.findByIdAndDelete(id);
+}
+
 async function getUsers(filter = {}) {
   checkConnection();
   if (mockDbMode) {
@@ -140,6 +157,28 @@ async function updateBusiness(id, updates) {
   }
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return Business.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+}
+
+async function findBusinessByEmail(email) {
+  checkConnection();
+  if (!email) return null;
+  const cleanEmail = email.toLowerCase().trim();
+  if (mockDbMode) {
+    return Array.from(mockStore.businesses.values()).find(b => b.email === cleanEmail) || null;
+  }
+  return Business.findOne({ email: cleanEmail });
+}
+
+async function deleteBusiness(id) {
+  checkConnection();
+  if (!id) return null;
+  const idStr = id.toString();
+  if (mockDbMode) {
+    mockStore.businesses.delete(idStr);
+    return { deletedCount: 1 };
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  return Business.findByIdAndDelete(id);
 }
 
 // --- Locations ---
@@ -400,11 +439,14 @@ module.exports = {
   findUserByEmail,
   findUserById,
   createUser,
+  deleteUser,
   getUsers,
   getBusinesses,
   getBusinessById,
+  findBusinessByEmail,
   createBusiness,
   updateBusiness,
+  deleteBusiness,
   getLocations,
   getLocationById,
   createLocation,
@@ -422,5 +464,6 @@ module.exports = {
   updateFeedback,
   deleteFeedback,
   logAudit,
-  getAuditLogs
+  getAuditLogs,
+  isDbConnected
 };

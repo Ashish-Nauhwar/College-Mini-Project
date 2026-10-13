@@ -5,6 +5,9 @@
   "main": "index.html",
   "scripts": {
     "start": "node ../backend/server.js",
+    "dev": "node --watch ../backend/server.js",
+    "server": "node ../backend/server.js",
+    "server.js": "node ../backend/server.js",
     "test": "node ../backend/tests/cdp-responsive-test.js"
   },
   "dependencies": {

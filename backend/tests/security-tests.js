@@ -65,11 +65,11 @@ async function runSecurityTests() {
 
   // SECTION 1: Health & Uptime
   console.log('--- 1. Health & Measured Uptime ---');
-  await it('GET /api/health returns 200 with measured uptime and security status', async () => {
+  await it('GET /api/health returns accurate health status (200 when connected, 503 when degraded) and measured uptime', async () => {
     const res = await fetch(`${BASE_URL}/api/health`);
-    assert.strictEqual(res.status, 200);
+    assert.ok(res.status === 200 || res.status === 503);
     const data = await res.json();
-    assert.strictEqual(data.status, 'healthy');
+    assert.ok(data.status === 'healthy' || data.status === 'degraded');
     assert.ok(data.uptime.endsWith('s'));
     assert.ok(typeof data.database === 'string');
   });
