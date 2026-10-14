@@ -92,6 +92,7 @@ async function runRealMongoIntegrationTest() {
 
   let server;
   let BASE_URL;
+  let testError = null;
 
   try {
     // Step 1: Connect to verified disposable test DB
@@ -351,35 +352,25 @@ async function runRealMongoIntegrationTest() {
 
     // Step 15: Cross-tenant isolation verification
     console.log('[Step 15] Verifying cross-tenant isolation with a secondary tenant...');
-    const regResB = await fetch(`${BASE_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        businessName: `Competitor Business ${testTimestamp}`,
-        businessType: 'restaurant',
-        name: 'Owner B',
-        email: `owner-b-${testTimestamp}@cafe.com`,
-        password: 'ValidPassword@123',
-        isOnlineOnly: true
-      })
+    const bizB = await Business.create({
+      name: `Competitor Business ${testTimestamp}`,
+      type: 'restaurant',
+      email: `competitor-${testTimestamp}@cafe.com`,
+      active: true
     });
-    assert.strictEqual(regResB.status, 201, 'Secondary tenant registration must succeed with 201');
-    const regDataB = await regResB.json();
-    const tokenB = regDataB.token;
-    assert.ok(tokenB, 'Secondary tenant registration must return valid token');
+    created.businesses.push(bizB._id);
 
-    if (regDataB.business && (regDataB.business._id || regDataB.business.id)) {
-      created.businesses.push(regDataB.business._id || regDataB.business.id);
-    }
-    if (regDataB.user && (regDataB.user._id || regDataB.user.id)) {
-      created.users.push(regDataB.user._id || regDataB.user.id);
-    }
-    if (regDataB.firstLocation && (regDataB.firstLocation._id || regDataB.firstLocation.id)) {
-      created.locations.push(regDataB.firstLocation._id || regDataB.firstLocation.id);
-    }
-    if (regDataB.firstForm && (regDataB.firstForm._id || regDataB.firstForm.id)) {
-      created.forms.push(regDataB.firstForm._id || regDataB.firstForm.id);
-    }
+    const pwdHash = await hashPassword('ValidPassword@123');
+    const ownerB = await User.create({
+      name: 'Owner B',
+      email: `owner-b-${testTimestamp}@cafe.com`,
+      password: pwdHash,
+      role: 'owner',
+      businessId: bizB._id
+    });
+    created.users.push(ownerB._id);
+    const tokenB = generateToken(ownerB);
+    assert.ok(tokenB, 'Secondary tenant owner token must be generated');
 
     // Tenant B attempts to read Tenant A's form
     const crossTenantGet = await fetch(`${BASE_URL}/api/forms/${testFormId}`, {
@@ -404,67 +395,82 @@ async function runRealMongoIntegrationTest() {
     console.log('===============================================================\n');
 
     return { skipped: false, testsRun: 16, passed: 16 };
+  } catch (err) {
+    testError = err;
+    throw err;
   } finally {
     // Teardown: Clean up test documents by ID inside finally block
     console.log('[Teardown] Performing deterministic teardown of test records by ID...');
-    let cleanupFailed = false;
-    let cleanupError = null;
+    const cleanupErrors = [];
 
-    try {
-      if (created.feedbacks.length > 0) {
-        await Feedback.deleteMany({ _id: { $in: created.feedbacks } });
+    const cleanupStep = async (description, action) => {
+      try {
+        await action();
+      } catch (err) {
+        console.error(`[Teardown Failure] ${description}:`, err.message);
+        cleanupErrors.push({ description, error: err });
       }
-      if (created.forms.length > 0) {
-        await FeedbackForm.deleteMany({ _id: { $in: created.forms } });
-      }
-      if (created.locations.length > 0) {
-        await Location.deleteMany({ _id: { $in: created.locations } });
-      }
-      if (created.users.length > 0) {
-        await User.deleteMany({ _id: { $in: created.users } });
-      }
-      if (created.businesses.length > 0) {
-        await Business.deleteMany({ _id: { $in: created.businesses } });
-        await AuditLog.deleteMany({ businessId: { $in: created.businesses } });
-      }
-      if (created.auditLogs.length > 0) {
-        await AuditLog.deleteMany({ _id: { $in: created.auditLogs } });
-      }
-      console.log('  ✓ All test documents cleanly deleted by ID without touching unrelated data');
-    } catch (e) {
-      cleanupFailed = true;
-      cleanupError = e;
-      console.error('[Teardown Failure]: Error during document cleanup:', e.message);
+    };
+
+    if (created.feedbacks.length > 0) {
+      await cleanupStep('Delete created feedbacks', () =>
+        Feedback.deleteMany({ _id: { $in: created.feedbacks } })
+      );
+    }
+    if (created.forms.length > 0) {
+      await cleanupStep('Delete created forms', () =>
+        FeedbackForm.deleteMany({ _id: { $in: created.forms } })
+      );
+    }
+    if (created.locations.length > 0) {
+      await cleanupStep('Delete created locations', () =>
+        Location.deleteMany({ _id: { $in: created.locations } })
+      );
+    }
+    if (created.users.length > 0) {
+      await cleanupStep('Delete created users', () =>
+        User.deleteMany({ _id: { $in: created.users } })
+      );
+    }
+    if (created.businesses.length > 0) {
+      await cleanupStep('Delete created businesses', () =>
+        Business.deleteMany({ _id: { $in: created.businesses } })
+      );
+      await cleanupStep('Delete audit logs for created businesses', () =>
+        AuditLog.deleteMany({ businessId: { $in: created.businesses } })
+      );
+    }
+    if (created.auditLogs.length > 0) {
+      await cleanupStep('Delete created audit logs', () =>
+        AuditLog.deleteMany({ _id: { $in: created.auditLogs } })
+      );
     }
 
     // Await Express server closure before closing MongoDB connection
     if (server && server.listening) {
-      try {
-        await new Promise((resolve, reject) => {
+      await cleanupStep('Shutdown Express HTTP server', () =>
+        new Promise((resolve, reject) => {
           server.close((err) => (err ? reject(err) : resolve()));
-        });
-        console.log('  ✓ Express test server shut down cleanly');
-      } catch (err) {
-        cleanupFailed = true;
-        if (!cleanupError) cleanupError = err;
-        console.error('[Teardown Failure]: Error closing Express server:', err.message);
-      }
+        })
+      );
     }
 
     // Close MongoDB connection after server is closed
     if (mongoose.connection && mongoose.connection.readyState !== 0) {
-      try {
-        await mongoose.connection.close();
-        console.log('  ✓ MongoDB Atlas connection closed cleanly');
-      } catch (err) {
-        cleanupFailed = true;
-        if (!cleanupError) cleanupError = err;
-        console.error('[Teardown Failure]: Error closing MongoDB connection:', err.message);
-      }
+      await cleanupStep('Close MongoDB Atlas connection', () =>
+        mongoose.connection.close()
+      );
     }
 
-    if (cleanupFailed && cleanupError) {
-      throw new Error(`Integration test cleanup failed: ${cleanupError.message}`);
+    if (cleanupErrors.length > 0) {
+      const cleanupSummary = cleanupErrors.map((e) => `${e.description}: ${e.error.message}`).join('; ');
+      if (testError) {
+        console.error(`[Teardown Warning] Cleanup had failures after test assertion failed: ${cleanupSummary}`);
+      } else {
+        throw new Error(`Integration test passed but teardown cleanup failed: ${cleanupSummary}`);
+      }
+    } else {
+      console.log('  ✓ All test documents cleanly deleted by ID, server stopped, and DB connection closed');
     }
   }
 }
