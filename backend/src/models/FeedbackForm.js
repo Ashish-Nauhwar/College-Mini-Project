@@ -128,6 +128,14 @@ const feedbackFormSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    overallRatingEnabled: {
+      type: Boolean,
+      default: true
+    },
+    overallRatingRequired: {
+      type: Boolean,
+      default: true
+    },
     googleReviewUrl: {
       type: String,
       trim: true,
@@ -148,5 +156,18 @@ const feedbackFormSchema = new mongoose.Schema(
 );
 
 feedbackFormSchema.index({ businessId: 1, status: 1 });
+
+feedbackFormSchema.pre('validate', function () {
+  if (this.overallRatingEnabled !== undefined && this.isModified('overallRatingEnabled')) {
+    this.showOverallRating = Boolean(this.overallRatingEnabled);
+  } else if (this.showOverallRating !== undefined) {
+    this.overallRatingEnabled = Boolean(this.showOverallRating);
+  }
+  if (this.overallRatingRequired !== undefined && this.isModified('overallRatingRequired')) {
+    this.requireOverallRating = Boolean(this.overallRatingRequired);
+  } else if (this.requireOverallRating !== undefined) {
+    this.overallRatingRequired = Boolean(this.requireOverallRating);
+  }
+});
 
 module.exports = mongoose.models.FeedbackForm || mongoose.model('FeedbackForm', feedbackFormSchema);

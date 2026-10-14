@@ -392,8 +392,14 @@ async function handleSubmit(req, res) {
     }
 
     // Extract Star Rating (1 to 5 scale) - Respects form configuration (Priority 3)
-    const showOverallRating = form.showOverallRating !== false;
-    const requireOverallRating = showOverallRating && form.requireOverallRating !== false;
+    const showOverallRating = form.overallRatingEnabled !== undefined
+      ? Boolean(form.overallRatingEnabled)
+      : (form.showOverallRating !== false);
+    const requireOverallRating = showOverallRating && (
+      form.overallRatingRequired !== undefined
+        ? Boolean(form.overallRatingRequired)
+        : (form.requireOverallRating !== false)
+    );
 
     let overallRating = null;
     if (showOverallRating) {

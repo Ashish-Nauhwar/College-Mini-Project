@@ -482,8 +482,10 @@ router.post('/', requireAuth, requireRole('owner', 'college_admin', 'superadmin'
       status: initialStatus,
       googleReviewUrl: googleReviewUrl ? googleReviewUrl.trim() : '',
       allowAnonymous: allowAnonymous !== false,
-      showOverallRating: req.body.showOverallRating !== false,
-      requireOverallRating: req.body.requireOverallRating !== false,
+      showOverallRating: req.body.overallRatingEnabled !== undefined ? Boolean(req.body.overallRatingEnabled) : (req.body.showOverallRating !== false),
+      requireOverallRating: req.body.overallRatingRequired !== undefined ? Boolean(req.body.overallRatingRequired) : (req.body.requireOverallRating !== false),
+      overallRatingEnabled: req.body.overallRatingEnabled !== undefined ? Boolean(req.body.overallRatingEnabled) : (req.body.showOverallRating !== false),
+      overallRatingRequired: req.body.overallRatingRequired !== undefined ? Boolean(req.body.overallRatingRequired) : (req.body.requireOverallRating !== false),
       collegeFieldsConfig: collegeFieldsConfig || {},
       questions: qValidation.questions
     });
@@ -576,8 +578,16 @@ router.put('/:id', requireAuth, requireRole('owner', 'college_admin', 'superadmi
     if (formType) updates.formType = formType;
     if (googleReviewUrl !== undefined) updates.googleReviewUrl = googleReviewUrl.trim();
     if (allowAnonymous !== undefined) updates.allowAnonymous = Boolean(allowAnonymous);
-    if (req.body.showOverallRating !== undefined) updates.showOverallRating = Boolean(req.body.showOverallRating);
-    if (req.body.requireOverallRating !== undefined) updates.requireOverallRating = Boolean(req.body.requireOverallRating);
+    if (req.body.overallRatingEnabled !== undefined || req.body.showOverallRating !== undefined) {
+      const enabled = req.body.overallRatingEnabled !== undefined ? Boolean(req.body.overallRatingEnabled) : Boolean(req.body.showOverallRating);
+      updates.showOverallRating = enabled;
+      updates.overallRatingEnabled = enabled;
+    }
+    if (req.body.overallRatingRequired !== undefined || req.body.requireOverallRating !== undefined) {
+      const reqd = req.body.overallRatingRequired !== undefined ? Boolean(req.body.overallRatingRequired) : Boolean(req.body.requireOverallRating);
+      updates.requireOverallRating = reqd;
+      updates.overallRatingRequired = reqd;
+    }
     if (collegeFieldsConfig !== undefined) updates.collegeFieldsConfig = collegeFieldsConfig;
 
     if (questions !== undefined) {

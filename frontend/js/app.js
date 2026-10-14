@@ -906,8 +906,14 @@ const app = (function () {
       setCheckbox('cfgSubject', cfg.subjectEnabled);
       setCheckbox('cfgCategory', cfg.categoryEnabled);
       setCheckbox('cfgAllowAnonymous', currentBuilderForm.allowAnonymous !== false);
-      setCheckbox('cfgShowOverallRating', currentBuilderForm.showOverallRating !== false);
-      setCheckbox('cfgRequireOverallRating', currentBuilderForm.requireOverallRating !== false);
+      const isRatingEnabled = currentBuilderForm.overallRatingEnabled !== undefined
+        ? Boolean(currentBuilderForm.overallRatingEnabled)
+        : (currentBuilderForm.showOverallRating !== false);
+      const isRatingRequired = currentBuilderForm.overallRatingRequired !== undefined
+        ? Boolean(currentBuilderForm.overallRatingRequired)
+        : (currentBuilderForm.requireOverallRating !== false);
+      setCheckbox('cfgShowOverallRating', isRatingEnabled);
+      setCheckbox('cfgRequireOverallRating', isRatingRequired);
 
       // Render college onboarding notice if academic configuration is incomplete
       const noticeEl = document.getElementById('builderCollegeNotice');
@@ -1258,6 +1264,8 @@ const app = (function () {
       allowAnonymous: document.getElementById('cfgAllowAnonymous')?.checked !== false,
       showOverallRating: document.getElementById('cfgShowOverallRating')?.checked !== false,
       requireOverallRating: document.getElementById('cfgRequireOverallRating')?.checked !== false,
+      overallRatingEnabled: document.getElementById('cfgShowOverallRating')?.checked !== false,
+      overallRatingRequired: document.getElementById('cfgRequireOverallRating')?.checked !== false,
       questions: currentBuilderForm.questions
     };
 

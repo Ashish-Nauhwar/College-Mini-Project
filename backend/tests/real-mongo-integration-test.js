@@ -145,8 +145,18 @@ async function runRealMongoIntegrationTest() {
     const ownerUser = regData.user;
     const ownerToken = regData.token;
 
-    created.businesses.push(testBiz._id);
-    created.users.push(ownerUser.id || ownerUser._id);
+    if (testBiz && (testBiz._id || testBiz.id)) {
+      created.businesses.push(testBiz._id || testBiz.id);
+    }
+    if (ownerUser && (ownerUser.id || ownerUser._id)) {
+      created.users.push(ownerUser.id || ownerUser._id);
+    }
+    if (regData.firstLocation && (regData.firstLocation._id || regData.firstLocation.id)) {
+      created.locations.push(regData.firstLocation._id || regData.firstLocation.id);
+    }
+    if (regData.firstForm && (regData.firstForm._id || regData.firstForm.id)) {
+      created.forms.push(regData.firstForm._id || regData.firstForm.id);
+    }
 
     // Update business with academic configuration for college workflow
     await Business.updateOne(

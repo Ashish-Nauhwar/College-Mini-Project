@@ -68,8 +68,14 @@
       renderDynamicQuestions(currentForm.questions || []);
 
       // Configure overall star rating selector based on form settings (Priority 3)
-      const showOverallRating = currentForm.showOverallRating !== false;
-      const requireOverallRating = showOverallRating && currentForm.requireOverallRating !== false;
+      const showOverallRating = currentForm.overallRatingEnabled !== undefined
+        ? Boolean(currentForm.overallRatingEnabled)
+        : (currentForm.showOverallRating !== false);
+      const requireOverallRating = showOverallRating && (
+        currentForm.overallRatingRequired !== undefined
+          ? Boolean(currentForm.overallRatingRequired)
+          : (currentForm.requireOverallRating !== false)
+      );
       const ratingGroup = document.getElementById('ratingQuestionGroup');
       const ratingLabel = document.getElementById('primaryRatingLabel');
 
@@ -459,8 +465,14 @@
     let firstInvalidField = null;
 
     // Validate Star Rating (Priority 3)
-    const showOverallRating = currentForm.showOverallRating !== false;
-    const requireOverallRating = showOverallRating && currentForm.requireOverallRating !== false;
+    const showOverallRating = currentForm.overallRatingEnabled !== undefined
+      ? Boolean(currentForm.overallRatingEnabled)
+      : (currentForm.showOverallRating !== false);
+    const requireOverallRating = showOverallRating && (
+      currentForm.overallRatingRequired !== undefined
+        ? Boolean(currentForm.overallRatingRequired)
+        : (currentForm.requireOverallRating !== false)
+    );
 
     if (showOverallRating && requireOverallRating && !selectedRating) {
       const ratingErr = document.getElementById('ratingError');

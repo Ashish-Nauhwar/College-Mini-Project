@@ -302,8 +302,418 @@ async function runPhase10Tests() {
     console.log('  ✓ /dashboard returns SPA index.html');
     passedCount++;
 
+    // Test 13: Unsupported HTTP methods on API routes return JSON 404 (never HTML)
+    console.log('\n[Test 13] Verifying unsupported HTTP methods return JSON 404...');
+    const unsupportedMethodRes = await fetch(`${BASE_URL}/api/auth/login`, { method: 'DELETE' });
+    assert.strictEqual(unsupportedMethodRes.status, 404);
+    const methodErrJson = await unsupportedMethodRes.json();
+    assert.ok(methodErrJson.error && methodErrJson.error.includes('not found'));
+    console.log('  ✓ Unsupported HTTP method returned JSON 404');
+    passedCount++;
+
+    // Test 14: Negative Academic Field Validation (missing required, forged, department mismatch)
+    console.log('\n[Test 14] Verifying strict academic field validation...');
+    const validCollegeAnswers = {
+      q_academic_clarity: 5,
+      q_syllabus_coverage: 5,
+      q_doubt_solving: 'Always addressed thoroughly',
+      q_college_nps: 10
+    };
+
+    // Missing required department
+    const missingDeptRes = await fetch(`${BASE_URL}/api/feedback/submit/${collegeForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        academicDetails: {
+          department: '',
+          course: 'B.Tech',
+          academicYear: '2025-2026',
+          yearOfStudy: '1st Year',
+          semester: 'Semester 1',
+          section: 'Section A',
+          faculty: 'Dr. Alan Turing',
+          subject: 'Data Structures',
+          category: 'Theory'
+        },
+        rating: 5,
+        answers: validCollegeAnswers
+      })
+    });
+    assert.strictEqual(missingDeptRes.status, 400);
+    const missingDeptErr = await missingDeptRes.json();
+    assert.ok(missingDeptErr.error.includes('Department'), `Must reject missing department, got: ${missingDeptErr.error}`);
+    console.log('  ✓ Rejected missing required department with HTTP 400');
+
+    // Forged department not in institution configuration
+    const forgedDeptRes = await fetch(`${BASE_URL}/api/feedback/submit/${collegeForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        academicDetails: {
+          department: 'Astronautical Engineering (Unregistered)',
+          course: 'B.Tech',
+          academicYear: '2025-2026',
+          yearOfStudy: '1st Year',
+          semester: 'Semester 1',
+          section: 'Section A',
+          faculty: 'Dr. Alan Turing',
+          subject: 'Data Structures',
+          category: 'Theory'
+        },
+        rating: 5,
+        answers: validCollegeAnswers
+      })
+    });
+    assert.strictEqual(forgedDeptRes.status, 400);
+    const forgedDeptErr = await forgedDeptRes.json();
+    assert.ok(forgedDeptErr.error.includes('Invalid department'), 'Must reject unregistered department');
+    console.log('  ✓ Rejected forged department with HTTP 400');
+    passedCount++;
+
+    // Test 15: Conditional Dynamic Questions (hidden questions not required; active questions enforced)
+    console.log('\n[Test 15] Verifying conditional questions logic...');
+    const condFormRes = await fetch(`${BASE_URL}/api/forms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cafeData.token}`
+      },
+      body: JSON.stringify({
+        title: 'Conditional Branching Form',
+        overallRatingEnabled: false,
+        questions: [
+          {
+            id: 'q_recommend',
+            type: 'choice',
+            text: 'Would you recommend us?',
+            options: ['Yes', 'No'],
+            required: true
+          },
+          {
+            id: 'q_reason',
+            type: 'text',
+            text: 'Why would you not recommend us?',
+            required: true,
+            conditional: {
+              dependsOn: 'q_recommend',
+              operator: 'equals',
+              value: 'No'
+            }
+          }
+        ]
+      })
+    });
+    assert.strictEqual(condFormRes.status, 201);
+    const condForm = (await condFormRes.json()).form;
+    await fetch(`${BASE_URL}/api/forms/${condForm.id}/publish`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${cafeData.token}` }
+    });
+
+    // Submitting 'Yes' -> q_reason is inactive and not required (must succeed)
+    const condYesRes = await fetch(`${BASE_URL}/api/feedback/submit/${condForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: { q_recommend: 'Yes' }
+      })
+    });
+    assert.strictEqual(condYesRes.status, 201, 'Inactive conditional question should not be required');
+    console.log('  ✓ Inactive conditional question correctly skipped from requirement');
+
+    // Submitting 'No' without q_reason -> must fail with HTTP 400
+    const condNoMissingRes = await fetch(`${BASE_URL}/api/feedback/submit/${condForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: { q_recommend: 'No' }
+      })
+    });
+    assert.strictEqual(condNoMissingRes.status, 400, 'Active conditional question must be required');
+    const condNoMissingErr = await condNoMissingRes.json();
+    assert.ok(condNoMissingErr.error.includes('required'), 'Must enforce active conditional question');
+
+    // Submitting 'No' with q_reason -> must succeed
+    const condNoSuccessRes = await fetch(`${BASE_URL}/api/feedback/submit/${condForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: { q_recommend: 'No', q_reason: 'Slow response' }
+      })
+    });
+    assert.strictEqual(condNoSuccessRes.status, 201);
+    console.log('  ✓ Active conditional question validated and saved');
+    passedCount++;
+
+    // Test 16: Multiple Rating Questions with overallRatingEnabled: false
+    console.log('\n[Test 16] Verifying multiple rating questions with overallRatingEnabled: false...');
+    const multiRatingFormRes = await fetch(`${BASE_URL}/api/forms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cafeData.token}`
+      },
+      body: JSON.stringify({
+        title: 'Multi-Rating Category Evaluation',
+        overallRatingEnabled: false,
+        questions: [
+          { id: 'q_speed', type: 'rating', text: 'Speed of delivery', required: true },
+          { id: 'q_quality', type: 'rating', text: 'Food quality', required: true }
+        ]
+      })
+    });
+    assert.strictEqual(multiRatingFormRes.status, 201);
+    const multiRatingForm = (await multiRatingFormRes.json()).form;
+    await fetch(`${BASE_URL}/api/forms/${multiRatingForm.id}/publish`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${cafeData.token}` }
+    });
+
+    const multiSubmitRes = await fetch(`${BASE_URL}/api/feedback/submit/${multiRatingForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: { q_speed: 3, q_quality: 5 }
+      })
+    });
+    assert.strictEqual(multiSubmitRes.status, 201);
+    const multiData = await multiSubmitRes.json();
+    assert.strictEqual(multiData.rating, null, 'Overall rating must be null');
+    const multiDoc = await db.getFeedbackById(multiData.feedbackId);
+    const multiDocAnswers = multiDoc.answers instanceof Map
+      ? Object.fromEntries(multiDoc.answers)
+      : (multiDoc.toObject ? multiDoc.toObject().answers : multiDoc.answers);
+    assert.strictEqual(multiDoc.rating, null);
+    assert.strictEqual(multiDocAnswers.q_speed, 3);
+    assert.strictEqual(multiDocAnswers.q_quality, 5);
+    console.log('  ✓ Multiple rating questions stored independently; overall rating remains null');
+    passedCount++;
+
+    // Test 17: NPS-Only Form without overall rating
+    console.log('\n[Test 17] Verifying NPS-only form submission and analytics...');
+    const npsFormRes = await fetch(`${BASE_URL}/api/forms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cafeData.token}`
+      },
+      body: JSON.stringify({
+        title: 'Net Promoter Survey',
+        overallRatingEnabled: false,
+        questions: [
+          { id: 'q_nps_only', type: 'nps', text: 'Recommend us? (0-10)', required: true }
+        ]
+      })
+    });
+    assert.strictEqual(npsFormRes.status, 201);
+    const npsForm = (await npsFormRes.json()).form;
+    await fetch(`${BASE_URL}/api/forms/${npsForm.id}/publish`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${cafeData.token}` }
+    });
+
+    const npsSubmitRes = await fetch(`${BASE_URL}/api/feedback/submit/${npsForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: { q_nps_only: 10 }
+      })
+    });
+    assert.strictEqual(npsSubmitRes.status, 201);
+    const npsSubData = await npsSubmitRes.json();
+    assert.strictEqual(npsSubData.rating, null);
+    const npsDoc = await db.getFeedbackById(npsSubData.feedbackId);
+    assert.strictEqual(npsDoc.rating, null);
+    assert.strictEqual(npsDoc.nps, 10);
+
+    const npsScore = calculateNps([npsDoc]);
+    assert.strictEqual(npsScore.npsScore, 100);
+    const avgScore = calculateAverageRating([npsDoc]);
+    assert.strictEqual(avgScore, 'N/A');
+    console.log('  ✓ NPS-only submission recorded: NPS = +100, Average Rating = "N/A"');
+    passedCount++;
+
+    // Test 18: Optional Overall Rating (overallRatingEnabled: true, overallRatingRequired: false)
+    console.log('\n[Test 18] Verifying optional overall rating form...');
+    const optRatingFormRes = await fetch(`${BASE_URL}/api/forms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cafeData.token}`
+      },
+      body: JSON.stringify({
+        title: 'Optional Star Survey',
+        overallRatingEnabled: true,
+        overallRatingRequired: false,
+        questions: [
+          { id: 'q_comment', type: 'text', text: 'Notes' }
+        ]
+      })
+    });
+    assert.strictEqual(optRatingFormRes.status, 201);
+    const optRatingForm = (await optRatingFormRes.json()).form;
+    await fetch(`${BASE_URL}/api/forms/${optRatingForm.id}/publish`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${cafeData.token}` }
+    });
+
+    // Unrated submission succeeds
+    const unratedSubmitRes = await fetch(`${BASE_URL}/api/feedback/submit/${optRatingForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers: { q_comment: 'No stars given' }
+      })
+    });
+    assert.strictEqual(unratedSubmitRes.status, 201);
+    const unratedData = await unratedSubmitRes.json();
+    assert.strictEqual(unratedData.rating, null);
+
+    // Rated submission succeeds
+    const ratedSubmitRes = await fetch(`${BASE_URL}/api/feedback/submit/${optRatingForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rating: 4,
+        answers: { q_comment: 'Four stars given' }
+      })
+    });
+    assert.strictEqual(ratedSubmitRes.status, 201);
+    const ratedData = await ratedSubmitRes.json();
+    assert.strictEqual(ratedData.rating, 4);
+
+    const unratedDoc = await db.getFeedbackById(unratedData.feedbackId);
+    const ratedDoc = await db.getFeedbackById(ratedData.feedbackId);
+    const combinedAvg = calculateAverageRating([unratedDoc, ratedDoc]);
+    assert.strictEqual(String(combinedAvg), '4.0', 'Average must be calculated strictly on rated submission');
+    console.log('  ✓ Optional overall rating: unrated is null, rated is 4, combined avg = 4.0');
+    passedCount++;
+
+    // Test 19: QR Code Generation Endpoint
+    console.log('\n[Test 19] Verifying QR image generation endpoint...');
+    const qrRes = await fetch(`${BASE_URL}/api/qr/image?url=${encodeURIComponent(`${BASE_URL}/feedback/${collegeForm.slug}`)}`);
+    assert.strictEqual(qrRes.status, 200);
+    const qrType = qrRes.headers.get('content-type') || '';
+    assert.ok(qrType.includes('image/svg+xml') || qrType.includes('image/png'), `Expected image MIME type, got ${qrType}`);
+    console.log(`  ✓ QR image generated with Content-Type: ${qrType}`);
+    passedCount++;
+
+    // Test 20: Complete College Onboarding E2E Lifecycle
+    console.log('\n[Test 20] Verifying end-to-end college onboarding lifecycle...');
+    const e2eCollegeEmail = `lifecycle_college_${timestamp}@apexuniv.edu`;
+    const e2eRegRes = await fetch(`${BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessName: `Apex Lifecycle University ${timestamp}`,
+        businessType: 'college',
+        ownerName: 'Registrar Jones',
+        email: e2eCollegeEmail,
+        password: 'Password@123',
+        isOnlineOnly: false,
+        address: {
+          addressLine1: '400 North Campus Way',
+          city: 'Tech Hub',
+          state: 'Haryana',
+          postalCode: '122001',
+          country: 'India'
+        }
+      })
+    });
+    assert.strictEqual(e2eRegRes.status, 201);
+    const e2eData = await e2eRegRes.json();
+    const e2eToken = e2eData.token;
+    const e2eInitialForm = e2eData.firstForm;
+    assert.strictEqual(e2eInitialForm.status, 'draft', 'College starts with draft form');
+
+    // 1. Submit blocked on draft form
+    const e2eDraftSubmitRes = await fetch(`${BASE_URL}/api/feedback/submit/${e2eInitialForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: {} })
+    });
+    assert.strictEqual(e2eDraftSubmitRes.status, 403, 'Public submit on draft form must be 403');
+
+    // 2. Publish blocked before configuration
+    const e2ePrematurePublish = await fetch(`${BASE_URL}/api/forms/${e2eInitialForm.id || e2eInitialForm._id}/publish`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${e2eToken}` }
+    });
+    assert.strictEqual(e2ePrematurePublish.status, 400);
+
+    // 3. Configure academic master data in settings
+    const e2eConfigRes = await fetch(`${BASE_URL}/api/auth/business-settings`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${e2eToken}`
+      },
+      body: JSON.stringify({
+        name: e2eData.business.name,
+        academicConfig: {
+          departments: ['Computer Science'],
+          courses: ['B.Tech'],
+          academicYears: ['2026-2027'],
+          years: ['Final Year'],
+          semesters: ['Semester 8'],
+          sections: ['Section Alpha'],
+          faculty: [{ name: 'Prof. Donald Knuth', department: 'Computer Science' }],
+          subjects: [{ name: 'Art of Programming', department: 'Computer Science' }],
+          feedbackCategories: ['Academic Delivery']
+        }
+      })
+    });
+    assert.strictEqual(e2eConfigRes.status, 200);
+
+    // 4. Publish evaluation form
+    const e2ePublishRes = await fetch(`${BASE_URL}/api/forms/${e2eInitialForm.id || e2eInitialForm._id}/publish`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${e2eToken}` }
+    });
+    assert.strictEqual(e2ePublishRes.status, 200);
+    const e2ePubForm = (await e2ePublishRes.json()).form;
+    assert.strictEqual(e2ePubForm.status, 'published');
+
+    // 5. Retrieve public form metadata
+    const e2ePublicFormRes = await fetch(`${BASE_URL}/api/forms/slug/${e2ePubForm.slug}`);
+    assert.strictEqual(e2ePublicFormRes.status, 200);
+    const e2ePubData = await e2ePublicFormRes.json();
+    assert.strictEqual(e2ePubData.form.status, 'published');
+    assert.ok(e2ePubData.business.academicConfig.faculty.length > 0);
+
+    // 6. Submit feedback successfully
+    const e2eSubmitSuccess = await fetch(`${BASE_URL}/api/feedback/submit/${e2ePubForm.slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: 'Student Alpha',
+        academicDetails: {
+          department: 'Computer Science',
+          course: 'B.Tech',
+          academicYear: '2026-2027',
+          yearOfStudy: 'Final Year',
+          semester: 'Semester 8',
+          section: 'Section Alpha',
+          faculty: 'Prof. Donald Knuth',
+          subject: 'Art of Programming',
+          category: 'Academic Delivery'
+        },
+        rating: 5,
+        answers: {
+          q_academic_clarity: 5,
+          q_syllabus_coverage: 5,
+          q_doubt_solving: 'Always addressed thoroughly',
+          q_college_nps: 10
+        }
+      })
+    });
+    assert.strictEqual(e2eSubmitSuccess.status, 201);
+    console.log('  ✓ Full college onboarding, configuration, publication and submission verified');
+    passedCount++;
+
     console.log('\n===============================================================');
-    console.log(`>>> [PASS] All ${passedCount} Phase 10 Verification Tests Passed!`);
+    console.log(`>>> [PASS] All ${passedCount} Phase 10/12 Verification Tests Passed!`);
     console.log('===============================================================\n');
 
     return { success: true, testsRun: passedCount, passed: passedCount };

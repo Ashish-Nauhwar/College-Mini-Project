@@ -141,6 +141,8 @@ async function runFinalSmokeTest() {
 
     bizId = regData.business._id || regData.business.id;
     userId = regData.user.id || regData.user._id;
+    const firstFormId = regData.firstForm ? (regData.firstForm._id || regData.firstForm.id) : null;
+    const firstLocationId = regData.firstLocation ? (regData.firstLocation._id || regData.firstLocation.id) : null;
     console.log(`  ✓ Successfully registered user "${testEmail}" (Business ID: ${bizId})`);
 
     // Step 5: Log in with credentials and verify access isolation
@@ -322,16 +324,21 @@ async function runFinalSmokeTest() {
   } finally {
     // Teardown: Clean up test artifacts
     console.log('\n[Step 13] Cleaning up smoke test artifacts...');
-    if (bizId) await Business.deleteOne({ _id: bizId }).catch(() => {});
-    if (userId) await User.deleteOne({ _id: userId }).catch(() => {});
     if (formId) await FeedbackForm.deleteOne({ _id: formId }).catch(() => {});
+    if (typeof firstFormId !== 'undefined' && firstFormId) await FeedbackForm.deleteOne({ _id: firstFormId }).catch(() => {});
+    if (bizId) await FeedbackForm.deleteMany({ businessId: bizId }).catch(() => {});
+    if (typeof firstLocationId !== 'undefined' && firstLocationId) await Location.deleteOne({ _id: firstLocationId }).catch(() => {});
     if (bizId) await Location.deleteMany({ businessId: bizId }).catch(() => {});
     if (formId) await Feedback.deleteMany({ formId }).catch(() => {});
+    if (bizId) await Feedback.deleteMany({ businessId: bizId }).catch(() => {});
     if (bizId) await AuditLog.deleteMany({ businessId: bizId }).catch(() => {});
+    if (userId) await User.deleteOne({ _id: userId }).catch(() => {});
+    if (bizId) await User.deleteMany({ businessId: bizId }).catch(() => {});
+    if (bizId) await Business.deleteOne({ _id: bizId }).catch(() => {});
     console.log('  ✓ All smoke test artifacts cleaned up cleanly');
 
-    await new Promise((resolve) => server.close(resolve));
-    await closeDB();
+    if (server) await new Promise((resolve) => server.close(resolve)).catch(() => {});
+    await closeDB().catch(() => {});
   }
 
   console.log('\n===============================================================');
