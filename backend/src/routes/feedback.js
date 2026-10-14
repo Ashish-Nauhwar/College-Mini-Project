@@ -503,8 +503,8 @@ async function handleSubmit(req, res) {
       }
     }
 
-    // Explicit sentiment & priority routing (Priority 3)
-    const { sentiment, priority } = determineSentimentAndPriority(overallRating, primaryNps, req.body.sentiment);
+    // Explicit sentiment & priority routing (Computed strictly on server; client cannot spoof sentiment)
+    const { sentiment, priority } = determineSentimentAndPriority(overallRating, primaryNps);
 
     // Save feedback to database
     const newFeedback = await db.createFeedback({
