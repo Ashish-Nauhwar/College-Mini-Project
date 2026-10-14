@@ -21,6 +21,7 @@
     "test:phase10": "node tests/phase10-release-verification-tests.js",
     "test:phase13": "node tests/phase13-logic-and-release-tests.js",
     "test:phase14": "node tests/phase14-regression-and-workflow-tests.js",
+    "test:phase15": "node tests/phase15-sentiment-security-and-release-tests.js",
     "test:integration": "node tests/real-mongo-integration-test.js",
     "test:smoke": "node tests/smoke-test-final.js",
     "verify:release": "node tests/verify-release.js",

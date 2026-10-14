@@ -372,6 +372,7 @@ async function getFeedbacks(filter = {}) {
     if (filter.locationId) list = list.filter(f => f.locationId && f.locationId.toString() === filter.locationId.toString());
     if (filter.status && filter.status !== 'all') list = list.filter(f => f.status === filter.status);
     if (filter.priority && filter.priority !== 'all') list = list.filter(f => f.priority === filter.priority);
+    if (filter.sentiment && filter.sentiment !== 'all') list = list.filter(f => f.sentiment === filter.sentiment);
     if (filter.rating && filter.rating !== 'all') list = list.filter(f => f.rating === filter.rating);
     return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   }

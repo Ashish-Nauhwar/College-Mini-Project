@@ -181,6 +181,17 @@ async function handleSubmit(req, res) {
             sanitizedAnswers[q.id] = num;
             break;
           }
+          case 'sentiment': {
+            const strVal = String(answerVal).trim().toLowerCase();
+            const allowedSentiments = ['positive', 'neutral', 'negative'];
+            if (!allowedSentiments.includes(strVal)) {
+              return res.status(400).json({
+                error: `Invalid sentiment for "${q.text}". Must be one of: ${allowedSentiments.join(', ')}`
+              });
+            }
+            sanitizedAnswers[q.id] = strVal;
+            break;
+          }
           case 'choice':
           case 'select': {
             const strVal = String(answerVal).trim();
@@ -503,8 +514,27 @@ async function handleSubmit(req, res) {
       }
     }
 
-    // Explicit sentiment & priority routing (Computed strictly on server; client cannot spoof sentiment)
-    const { sentiment, priority } = determineSentimentAndPriority(overallRating, primaryNps);
+    // Check for an explicit sentiment question configured in the published form
+    const configuredSentimentQuestions = (form.questions || []).filter(
+      q => q.type === 'sentiment' || q.id === 'sentiment' || q.id === 'q_sentiment'
+    );
+    let explicitSentimentAnswer = null;
+    if (configuredSentimentQuestions.length > 0) {
+      const sentQ = configuredSentimentQuestions[0];
+      const isSentQVisible = isQuestionVisible(sentQ, sanitizedAnswers, questionsMap);
+      if (isSentQVisible && sanitizedAnswers[sentQ.id] !== undefined) {
+        const val = String(sanitizedAnswers[sentQ.id]).trim().toLowerCase();
+        if (['positive', 'neutral', 'negative'].includes(val)) {
+          explicitSentimentAnswer = val;
+        }
+      }
+    }
+
+    // Explicit sentiment & priority routing
+    // Computed strictly on the server: derives classification solely from validated overallRating,
+    // canonical primaryNps, and (if configured and validated) an explicit sentiment question answer.
+    // Client-supplied arbitrary req.body.sentiment is NEVER trusted or used.
+    const { sentiment, priority } = determineSentimentAndPriority(overallRating, primaryNps, explicitSentimentAnswer);
 
     // Save feedback to database
     const newFeedback = await db.createFeedback({
@@ -574,6 +604,9 @@ router.get('/', requireAuth, async (req, res) => {
     }
     if (req.query.priority && req.query.priority !== 'all') {
       filter.priority = req.query.priority;
+    }
+    if (req.query.sentiment && req.query.sentiment !== 'all') {
+      filter.sentiment = req.query.sentiment;
     }
     if (req.query.locationId && req.query.locationId !== 'all') {
       filter.locationId = req.query.locationId;

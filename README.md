@@ -19,8 +19,8 @@ FeedbackHub is a mobile-first customer and institutional feedback management pla
   * `User`: Multi-tenant user accounts with role-based access (`owner`, `manager`, `college_admin`, `staff`, `superadmin`). Normalized unique email index.
   * `Business`: Profile, business type (`college`, `coaching`, `restaurant`, `healthcare`, `salon`, `other`), structured physical address or online-only mode, and academic master data (`academicConfig`).
   * `Location`: Multi-store / branch locations with tenant scoping.
-  * `FeedbackForm`: Dynamic feedback forms with unique slugs, lifecycle states (`draft`, `published`, `paused`, `archived`), starter templates, college field toggles, and 12 question types with full acyclic dependency graph validation.
-  * `Feedback`: Customer submissions with sentiment classification, priority routing, academic details, internal notes, and resolution tracking.
+  * `FeedbackForm`: Dynamic feedback forms with unique slugs, lifecycle states (`draft`, `published`, `paused`, `archived`), starter templates, college field toggles, and 13 question types (rating, nps, sentiment, text, multiline, choice, select, checkbox, yesno, email, phone, number, date) with full acyclic dependency graph validation.
+  * `Feedback`: Customer submissions with server-authoritative sentiment classification, priority routing, academic details, internal notes, and resolution tracking. Arbitrary client-spoofed sentiments are ignored.
   * `AuditLog`: System and super-admin audit trail.
 
 ---
@@ -282,6 +282,12 @@ npm test
 
 # Strict Release Gating (Fails if TEST_MONGODB_URI is missing or live tests are skipped)
 npm run verify:release
+
+# Phase 15 Secure Sentiment Classification & Release Verification
+npm run test:phase15
+
+# Phase 14 Regression & Workflow Verification (Submissions / Sentiment / College Onboarding)
+npm run test:phase14
 
 # Phase 13 Logic Verification (Conditionals / NPS Authority / Complaints)
 npm run test:phase13

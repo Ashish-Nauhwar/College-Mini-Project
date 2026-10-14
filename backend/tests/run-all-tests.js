@@ -56,6 +56,7 @@ async function main() {
     { name: 'Phase 10 Release Readiness & Verification [Express App & Onboarding Check]', file: 'phase10-release-verification-tests.js' },
     { name: 'Phase 13 Logic & Release Verification [Conditionals / NPS / Complaints]', file: 'phase13-logic-and-release-tests.js' },
     { name: 'Phase 14 Regression & Final Workflows [Submission / Sentiment / Onboarding]', file: 'phase14-regression-and-workflow-tests.js' },
+    { name: 'Phase 15 Secure Sentiment & Release Verification [Sentiment Security & Analytics]', file: 'phase15-sentiment-security-and-release-tests.js' },
     { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' },
     { name: 'Final 13-Step Release Smoke Verification [Live Database]', file: 'smoke-test-final.js' }
   ];

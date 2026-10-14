@@ -22,6 +22,7 @@ const questionSchema = new mongoose.Schema(
       enum: [
         'rating',
         'nps',
+        'sentiment',
         'text',
         'multiline',
         'choice',
