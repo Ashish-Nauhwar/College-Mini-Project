@@ -425,8 +425,10 @@ async function runFinalSmokeTest() {
     if (cleanupErrors.length > 0) {
       const cleanupSummary = cleanupErrors.map((e) => `${e.description}: ${e.error.message}`).join('; ');
       if (testError) {
-        console.error(`[Teardown Warning] Cleanup had failures after smoke test assertion failed: ${cleanupSummary}`);
+        console.error(`[Teardown Error] Smoke test assertion failed: "${testError.message}" AND cleanup also failed: ${cleanupSummary}`);
+        throw new Error(`Smoke test assertion failed: "${testError.message}" AND teardown cleanup also failed: ${cleanupSummary}`);
       } else {
+        console.error(`[Teardown Error] Smoke test cleanup failed: ${cleanupSummary}`);
         throw new Error(`Smoke test passed but teardown cleanup failed: ${cleanupSummary}`);
       }
     } else {
@@ -437,6 +439,7 @@ async function runFinalSmokeTest() {
   console.log('\n===============================================================');
   console.log('  ALL 13 SMOKE TEST STEPS PASSED WITH 100% SUCCESS! ✓          ');
   console.log('===============================================================\n');
+  return { success: true, skipped: false };
 }
 
 if (require.main === module) {

@@ -465,8 +465,10 @@ async function runRealMongoIntegrationTest() {
     if (cleanupErrors.length > 0) {
       const cleanupSummary = cleanupErrors.map((e) => `${e.description}: ${e.error.message}`).join('; ');
       if (testError) {
-        console.error(`[Teardown Warning] Cleanup had failures after test assertion failed: ${cleanupSummary}`);
+        console.error(`[Teardown Error] Integration test assertion failed: "${testError.message}" AND cleanup also failed: ${cleanupSummary}`);
+        throw new Error(`Integration test assertion failed: "${testError.message}" AND teardown cleanup also failed: ${cleanupSummary}`);
       } else {
+        console.error(`[Teardown Error] Integration test cleanup failed: ${cleanupSummary}`);
         throw new Error(`Integration test passed but teardown cleanup failed: ${cleanupSummary}`);
       }
     } else {

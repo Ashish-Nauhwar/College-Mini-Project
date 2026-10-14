@@ -1,6 +1,6 @@
 # FeedbackHub - Mobile-First Customer & Academic Feedback Platform
 
-FeedbackHub is a mobile-first customer and institutional feedback management platform (Release Candidate; ready for production deployment upon completion of live release verification). It enables businesses, colleges, and clinics to capture instant feedback via QR codes, analyze sentiment and NPS in real time, build dynamic multi-question surveys with acyclic conditional dependency logic, and manage complaints through dedicated workflows.
+FeedbackHub is a mobile-first customer and institutional feedback management platform. It enables businesses, colleges, and clinics to capture instant feedback via QR codes, analyze sentiment and NPS in real time, build dynamic multi-question surveys with acyclic conditional dependency logic, and manage complaints through dedicated workflows.
 
 ---
 
