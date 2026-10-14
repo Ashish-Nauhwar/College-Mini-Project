@@ -22,6 +22,7 @@
     "test:phase13": "node backend/tests/phase13-logic-and-release-tests.js",
     "test:phase14": "node backend/tests/phase14-regression-and-workflow-tests.js",
     "test:phase15": "node backend/tests/phase15-sentiment-security-and-release-tests.js",
+    "test:qr": "node backend/tests/qr-standards-tests.js",
     "test:integration": "node backend/tests/real-mongo-integration-test.js",
     "test:smoke": "node backend/tests/smoke-test-final.js",
     "verify:release": "node backend/tests/verify-release.js",
@@ -37,9 +38,14 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^9.6.3"
+    "mongoose": "^9.6.3",
+    "qrcode": "^1.5.4"
   },
   "engines": {
     "node": ">=22.0.0 <23.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsqr": "^1.4.0"
   }
 }

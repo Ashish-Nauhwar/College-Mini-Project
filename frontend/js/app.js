@@ -1552,52 +1552,139 @@ const app = (function () {
 
       const select = document.getElementById('qrFormSelect');
       if (select) {
-        select.innerHTML = forms.map(f => {
-          const statusTag = f.status !== 'published' ? ` [${f.status.toUpperCase()}]` : '';
+        // Prioritize published forms over drafts/archived
+        const publishedForms = forms.filter(f => f.status === 'published');
+        const unpublishedForms = forms.filter(f => f.status !== 'published');
+        const sortedForms = [...publishedForms, ...unpublishedForms];
+
+        if (sortedForms.length === 0) {
+          select.innerHTML = '<option value="">No forms available</option>';
+          renderSelectedQr(null);
+          return;
+        }
+
+        select.innerHTML = sortedForms.map(f => {
+          const statusTag = f.status !== 'published' ? ` [${f.status.toUpperCase()}]` : ' [PUBLISHED]';
           return `<option value="${f.slug}">${escapeHtml(f.title)} (${escapeHtml(f.locationName || 'General')})${statusTag}</option>`;
         }).join('');
 
-        const selectedSlug = select.value || (forms.length > 0 ? forms[0].slug : 'apex-downtown');
+        // Prioritize selecting the first published form
+        const selectedSlug = publishedForms.length > 0 ? publishedForms[0].slug : sortedForms[0].slug;
+        select.value = selectedSlug;
         renderSelectedQr(selectedSlug);
       } else {
-        renderSelectedQr('apex-downtown');
+        renderSelectedQr(null);
       }
     } catch (err) {
       console.error('Error loading QR view:', err);
-      renderSelectedQr('apex-downtown');
+      renderSelectedQr(null);
     }
   }
 
   function renderSelectedQr(slug) {
-    const targetSlug = slug || (forms && forms[0] ? forms[0].slug : 'apex-downtown');
-    const matchedForm = (forms || []).find(f => f.slug === targetSlug);
     const canvas = document.getElementById('qrCodeCanvas');
     const urlText = document.getElementById('qrTargetUrlText');
     const openLink = document.getElementById('qrOpenFormLink');
 
-    const formUrl = `${window.location.origin}/feedback/${targetSlug}`;
+    if (!slug) {
+      if (urlText) {
+        urlText.innerHTML = `
+          <div style="padding:10px 14px; background:#fef3c7; color:#92400e; border-radius:6px; font-weight:600;">
+            ⚠️ No published feedback forms found. Forms must be published in Form Builder before generating customer QR codes.
+            <div style="margin-top:8px;">
+              <button type="button" class="btn btn-sm btn-primary" onclick="app.navigateTo('forms')">Open Form Builder</button>
+            </div>
+          </div>
+        `;
+      }
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      if (openLink) {
+        openLink.style.display = 'none';
+      }
+      return;
+    }
+
+    const matchedForm = (forms || []).find(f => f.slug === slug);
+    const formUrl = `${window.location.origin}/feedback/${slug}`;
+
+    if (matchedForm && matchedForm.status !== 'published') {
+      if (urlText) {
+        urlText.innerHTML = `
+          <div style="padding:12px 14px; background:#fef3c7; color:#92400e; border-radius:6px;">
+            <div style="font-weight:700; margin-bottom:4px;">⚠️ Customer QR Unavailable for Unpublished Form</div>
+            <div>The form <strong>"${escapeHtml(matchedForm.title)}"</strong> is currently in <strong>${matchedForm.status.toUpperCase()}</strong> status. Customers cannot open or submit unpublished forms.</div>
+            <div style="margin-top:8px;">
+              <button type="button" class="btn btn-sm btn-primary" onclick="app.navigateTo('forms')">Open Form Builder to Publish</button>
+            </div>
+          </div>
+          <div style="margin-top:8px; font-size:0.75rem; color:#64748b; font-family:monospace;">Target: ${escapeHtml(formUrl)}</div>
+        `;
+      }
+
+      if (canvas) {
+        canvas.width = 260;
+        canvas.height = 260;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, 260, 260);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(1, 1, 258, 258);
+          ctx.fillStyle = '#64748b';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('Form Not Published', 130, 115);
+          ctx.font = '12px sans-serif';
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillText(`Status: ${matchedForm.status.toUpperCase()}`, 130, 140);
+          ctx.font = '11px sans-serif';
+          ctx.fillText('QR generation disabled', 130, 162);
+        }
+      }
+
+      if (openLink) {
+        openLink.href = '#';
+        openLink.style.display = '';
+        openLink.classList.add('disabled');
+        openLink.onclick = (e) => {
+          e.preventDefault();
+          showToast(`Form is currently "${matchedForm.status}". Publish it in Form Builder first.`, 'warning');
+        };
+      }
+      return;
+    }
+
+    // Published form:
+    if (openLink) {
+      openLink.href = formUrl;
+      openLink.style.display = '';
+      openLink.classList.remove('disabled');
+      openLink.onclick = null;
+    }
 
     if (urlText) {
-      if (matchedForm && matchedForm.status !== 'published') {
-        urlText.innerHTML = `${escapeHtml(formUrl)} <div style="margin-top:6px; padding:4px 8px; font-size:0.8rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700;">⚠️ Form status is "${matchedForm.status.toUpperCase()}". Public responses will be blocked until published in Form Builder.</div>`;
-      } else {
-        urlText.textContent = formUrl;
-      }
+      urlText.textContent = formUrl;
     }
-    if (openLink) openLink.href = formUrl;
 
     if (canvas) {
+      canvas.width = 260;
+      canvas.height = 260;
       if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
         window.QRCode.toCanvas(canvas, formUrl, {
           width: 260,
           margin: 2,
+          errorCorrectionLevel: 'M',
           color: {
             dark: '#0f172a',
             light: '#ffffff'
           }
         }, function (error) {
           if (error) {
-            console.error('Client QR render error, using fallback:', error);
+            console.error('Client QR render error, using backend fallback:', error);
             loadQrImageFallback(canvas, formUrl);
           }
         });
@@ -1614,27 +1701,58 @@ const app = (function () {
       canvas.width = 260;
       canvas.height = 260;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, 260, 260);
+      if (ctx) ctx.drawImage(img, 0, 0, 260, 260);
+    };
+    img.onerror = function () {
+      console.error('Failed to load standards-compliant backend QR fallback');
     };
     img.src = `/api/qr/image?url=${encodeURIComponent(formUrl)}&size=260`;
   }
 
   function copyQrLink() {
-    const urlText = document.getElementById('qrTargetUrlText')?.textContent;
-    if (urlText && navigator.clipboard) {
-      navigator.clipboard.writeText(urlText).then(() => {
+    const select = document.getElementById('qrFormSelect');
+    const selectedSlug = select ? select.value : null;
+    const matchedForm = (forms || []).find(f => f.slug === selectedSlug);
+
+    if (matchedForm && matchedForm.status !== 'published') {
+      showToast(`Cannot copy link: Form "${matchedForm.title}" is ${matchedForm.status}. Publish it first.`, 'warning');
+      return;
+    }
+
+    const urlText = document.getElementById('qrTargetUrlText')?.textContent?.trim();
+    const cleanUrl = (urlText && urlText.startsWith('http')) ? urlText : (selectedSlug ? `${window.location.origin}/feedback/${selectedSlug}` : null);
+
+    if (cleanUrl && navigator.clipboard) {
+      navigator.clipboard.writeText(cleanUrl).then(() => {
         showToast('Link copied to clipboard! Ready to share or print.', 'success');
       }).catch(() => {
         showToast('Could not copy link to clipboard', 'error');
       });
+    } else if (cleanUrl) {
+      const textarea = document.createElement('textarea');
+      textarea.value = cleanUrl;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      showToast('Link copied to clipboard!', 'success');
     }
   }
 
   function downloadQrPng() {
+    const select = document.getElementById('qrFormSelect');
+    const selectedSlug = select ? select.value : null;
+    const matchedForm = (forms || []).find(f => f.slug === selectedSlug);
+
+    if (matchedForm && matchedForm.status !== 'published') {
+      showToast(`Cannot download QR: Form "${matchedForm.title}" is ${matchedForm.status}. Publish it first.`, 'warning');
+      return;
+    }
+
     const canvas = document.getElementById('qrCodeCanvas');
     if (canvas) {
       const link = document.createElement('a');
-      link.download = 'feedback-qr.png';
+      link.download = `feedback-qr-${selectedSlug || 'code'}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
       showToast('High-resolution QR code image downloaded', 'success');

@@ -254,15 +254,15 @@ Reports environment file detection, port availability, active instance health de
 
 FeedbackHub provides two distinct tiers of automated verification:
 
-1. **`npm test` (Master Verification Runner - 15 Suites)**:
-   * Executes 13 offline unit, safety, security, and Express API integration suites against isolated in-memory mock storage (no live database required).
+1. **`npm test` (Master Verification Runner - 16 Suites)**:
+   * Executes 14 offline unit, safety, security, QR standards, and Express API integration suites against isolated in-memory mock storage (no live database required).
    * Executes 2 live MongoDB Atlas integration suites (16-Step API Integration & 13-Step Release Smoke Verification) when `TEST_MONGODB_URI` is configured in `backend/.env`.
    * If `TEST_MONGODB_URI` is not configured, live database suites report `[STATUS: SKIPPED]` cleanly with setup instructions, allowing offline checks to pass without requiring cloud database credentials.
 
-2. **`npm run verify:release` (Strict Release Gating - 15 Suites)**:
+2. **`npm run verify:release` (Strict Release Gating - 16 Suites)**:
    * Strict pre-deployment release gate for CI/CD pipelines and deployment signoff.
    * **Mandatory Requirement**: `TEST_MONGODB_URI` **must** be set, pointing to a verified disposable database (name containing `test`, `dev`, or `temp`).
-   * Unlike `npm test`, `verify:release` **strictly refuses to pass** if any live database test is skipped or fails. It terminates immediately with exit code 1 if `TEST_MONGODB_URI` is absent, contains placeholders, or points to a non-disposable database. All 15 suites must pass with exit code 0.
+   * Unlike `npm test`, `verify:release` **strictly refuses to pass** if any live database test is skipped or fails. It terminates immediately with exit code 1 if `TEST_MONGODB_URI` is absent, contains placeholders, or points to a non-disposable database. All 16 suites must pass with exit code 0.
 
 #### Run the Verification Runner
 ```bash
@@ -276,12 +276,12 @@ npm run verify:release
 > [!IMPORTANT]
 > `npm run verify:release` requires `TEST_MONGODB_URI` pointing to a disposable test database (e.g. `mongodb+srv://.../feedbackhub_test`). If `TEST_MONGODB_URI` is missing or any live test is skipped, `verify:release` fails with exit code 1.
 
-### Complete Suite Breakdown (15 Active Suites)
+### Complete Suite Breakdown (16 Active Suites)
 
 FeedbackHub's verification is organized into two distinct tiers:
 
-#### Tier 1: Offline Test Suites (13 Suites — Isolated Mock DB / Unit Tests)
-These suites test business logic, security rules, RBAC, input sanitization, and workflow assertions without requiring external database credentials:
+#### Tier 1: Offline Test Suites (14 Suites — Isolated Mock DB / Unit Tests)
+These suites test business logic, security rules, RBAC, input sanitization, QR standards, and workflow assertions without requiring external database credentials:
 ```bash
 # 1. Security & Auth Isolation
 npm run test:security
@@ -321,15 +321,18 @@ npm run test:phase14
 
 # 13. Phase 15 Secure Sentiment Classification & Release Verification
 npm run test:phase15
+
+# 14. QR Standards & Decoding Verification (Maintained qrcode Library & jsQR)
+npm run test:qr
 ```
 
 #### Tier 2: Live MongoDB Atlas Integration Suites (2 Suites — Require Disposable `TEST_MONGODB_URI`)
 These suites perform end-to-end HTTP verification and multi-tenant isolation assertions against a live disposable MongoDB database:
 ```bash
-# 14. Real MongoDB Atlas 16-Step API Integration
+# 15. Real MongoDB Atlas 16-Step API Integration
 npm run test:integration
 
-# 15. Final 13-Step Release Smoke Verification
+# 16. Final 13-Step Release Smoke Verification
 npm run test:smoke
 ```
 
