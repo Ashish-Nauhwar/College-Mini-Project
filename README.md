@@ -153,19 +153,20 @@ npm start
 
 ## 🛠️ Dynamic Form Builder & Publishing Lifecycle
 
-### 12 Supported Question Types & Strict Validation Boundaries
+### 13 Supported Question Types & Strict Validation Boundaries
 1. **Rating Control** (`rating`): Strict integer bounds where $1 \le \min < \max \le 5$. Malicious payloads rendering arbitrary numbers of stars or non-integer steps are rejected.
 2. **Net Promoter Score** (`nps`): Standard 0–10 advocacy scale ($\min: 0$, $\max: 10$).
-3. **Multiple Choice** (`choice`): Single-select choices capped at 50 options, max 200 characters per option string.
-4. **Dropdown Select** (`select`): Accessible dropdown selector with max 50 options, max 200 characters per option.
-5. **Checkboxes** (`checkbox`): Multi-select options with max 50 options.
-6. **Yes / No Toggle** (`yesno`): Strict boolean toggle with verified Yes/No persistence.
-7. **Short Text** (`text`): Single-line text input (up to 500 characters).
-8. **Multiline Comment** (`multiline`): Responsive auto-resizing comment box (up to 3000 characters).
-9. **Email Address** (`email`): Validated RFC email format.
-10. **Phone Number** (`phone`): Validated telephone input.
-11. **Numeric Value** (`number`): Strict `Number.isFinite` validation.
-12. **Date Picker** (`date`): Strict calendar date validation (rejecting non-calendar dates such as February 31).
+3. **Sentiment Analysis** (`sentiment`): Single-choice sentiment evaluation (`positive`, `neutral`, `negative`) with server-side validation.
+4. **Multiple Choice** (`choice`): Single-select choices capped at 50 options, max 200 characters per option string.
+5. **Dropdown Select** (`select`): Accessible dropdown selector with max 50 options, max 200 characters per option.
+6. **Checkboxes** (`checkbox`): Multi-select options with max 50 options.
+7. **Yes / No Toggle** (`yesno`): Strict boolean toggle with verified Yes/No persistence.
+8. **Short Text** (`text`): Single-line text input (up to 500 characters).
+9. **Multiline Comment** (`multiline`): Responsive auto-resizing comment box (up to 3000 characters).
+10. **Email Address** (`email`): Validated RFC email format.
+11. **Phone Number** (`phone`): Validated telephone input.
+12. **Numeric Value** (`number`): Strict `Number.isFinite` validation.
+13. **Date Picker** (`date`): Strict calendar date validation (rejecting non-calendar dates such as February 31).
 
 ### Unbypassable Form Publishing Lifecycle
 * **Draft by Default**: `POST /api/forms` unconditionally initializes forms in `draft` status regardless of the client payload.
@@ -275,45 +276,65 @@ npm run verify:release
 > [!IMPORTANT]
 > `npm run verify:release` requires `TEST_MONGODB_URI` pointing to a disposable test database (e.g. `mongodb+srv://.../feedbackhub_test`). If `TEST_MONGODB_URI` is missing or any live test is skipped, `verify:release` fails with exit code 1.
 
-### Individual Test Suites
+### Complete Suite Breakdown (15 Active Suites)
+
+FeedbackHub's verification is organized into two distinct tiers:
+
+#### Tier 1: Offline Test Suites (13 Suites — Isolated Mock DB / Unit Tests)
+These suites test business logic, security rules, RBAC, input sanitization, and workflow assertions without requiring external database credentials:
 ```bash
-# Master Test Runner (All Active Suites)
-npm test
-
-# Strict Release Gating (Fails if TEST_MONGODB_URI is missing or live tests are skipped)
-npm run verify:release
-
-# Phase 15 Secure Sentiment Classification & Release Verification
-npm run test:phase15
-
-# Phase 14 Regression & Workflow Verification (Submissions / Sentiment / College Onboarding)
-npm run test:phase14
-
-# Phase 13 Logic Verification (Conditionals / NPS Authority / Complaints)
-npm run test:phase13
-
-# Phase 10 Release Readiness & Usability
-npm run test:phase10
-
-# Phase 8 Production Safety, Mock DB Prohibition & E2E Registration
-npm run test:phase8
-
-# Phase 7 Signup, Routing Resilience & Blank-Screen Prevention
-npm run test:phase7
-
-# Phase 5 RBAC, Lifecycle Transitions & Production Safety
-npm run test:phase5
-
-# Security, Auth & RBAC Isolation
+# 1. Security & Auth Isolation
 npm run test:security
 
-# Real MongoDB Atlas Live Integration (Requires TEST_MONGODB_URI)
+# 2. NPS & Rating Formula Correctness
+npm run test:nps
+
+# 3. Injection Hardening & Form Validation
+npm run test:injection
+
+# 4. College Academic 12-Step E2E Flow
+npm run test:college
+
+# 5. Phase 4 Unit Tests (Graph DFS, Analytics, JWT Validation)
+npm run test:unit
+
+# 6. Phase 4 Data Safety & Database Name Protection
+npm run test:safety
+
+# 7. Phase 5 RBAC, Lifecycle Transitions & Production Safety
+npm run test:phase5
+
+# 8. Phase 7 Signup, Routing Resilience & Blank-Screen Prevention
+npm run test:phase7
+
+# 9. Phase 8 Production Safety, Mock DB Prohibition & E2E Registration
+npm run test:phase8
+
+# 10. Phase 10 Release Readiness & Usability
+npm run test:phase10
+
+# 11. Phase 13 Logic Verification (Conditionals / NPS Authority / Complaints)
+npm run test:phase13
+
+# 12. Phase 14 Regression & Workflow Verification (Submissions / Onboarding)
+npm run test:phase14
+
+# 13. Phase 15 Secure Sentiment Classification & Release Verification
+npm run test:phase15
+```
+
+#### Tier 2: Live MongoDB Atlas Integration Suites (2 Suites — Require Disposable `TEST_MONGODB_URI`)
+These suites perform end-to-end HTTP verification and multi-tenant isolation assertions against a live disposable MongoDB database:
+```bash
+# 14. Real MongoDB Atlas 16-Step API Integration
 npm run test:integration
 
-# Final 13-Step Release Smoke Verification (Requires TEST_MONGODB_URI)
+# 15. Final 13-Step Release Smoke Verification
 npm run test:smoke
+```
 
-# Multi-Device Responsive UI Verification (320px - 1440px)
+#### Frontend Responsive Layout Verification (Chrome DevTools Protocol)
+```bash
 npm run test:responsive
 ```
 

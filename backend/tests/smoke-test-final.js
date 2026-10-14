@@ -34,6 +34,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FALLBACK_DNS ===
 
 const app = require('../server');
 const { connectDB, isDbConnected, closeDB } = require('../src/config/db');
+const { isDisposableDatabase } = require('../scripts/seed');
 const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('../src/models');
 
 async function runFinalSmokeTest() {
@@ -53,31 +54,57 @@ async function runFinalSmokeTest() {
     return { success: true, skipped: true };
   }
 
-  // Step 1: Start Application Server & Connect Database
-  console.log('[Step 1] Connecting to MongoDB Atlas Test Database...');
-  const mongoose = require('mongoose');
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.connection.close();
+  // Pre-check database name safety
+  let dbName = '';
+  try {
+    const clean = testUri.replace(/^mongodb(\+srv)?:\/\//, 'http://');
+    const parsed = new URL(clean);
+    dbName = parsed.pathname ? parsed.pathname.replace(/^\//, '').split('?')[0] : '';
+  } catch (err) {}
+
+  if (!isDisposableDatabase(dbName)) {
+    console.error(`[SAFETY REFUSAL] Real DB smoke test refused: Database name "${dbName}" is not verified disposable.`);
+    console.error('The database name in TEST_MONGODB_URI must contain "test", "dev", or "temp".');
+    process.exit(1);
   }
-  await mongoose.connect(testUri, { serverSelectionTimeoutMS: 5000 });
-  assert.strictEqual(isDbConnected(), true, 'isDbConnected() must return true');
-  console.log('  ✓ Connected to MongoDB Atlas test database successfully');
 
-  let server;
-  let BASE_URL;
-  await new Promise((resolve) => {
-    server = http.createServer(app);
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      BASE_URL = `http://127.0.0.1:${port}`;
-      resolve();
+  const created = {
+    businesses: [],
+    users: [],
+    locations: [],
+    forms: [],
+    feedbacks: [],
+    auditLogs: []
+  };
+
+  let server = null;
+  let BASE_URL = null;
+  let testError = null;
+
+  try {
+    // Step 1: Start Application Server & Connect Database
+    console.log('[Step 1] Connecting to MongoDB Atlas Test Database...');
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close();
+    }
+    await mongoose.connect(testUri, { serverSelectionTimeoutMS: 5000 });
+    assert.strictEqual(isDbConnected(), true, 'isDbConnected() must return true');
+    console.log('  ✓ Connected to MongoDB Atlas test database successfully');
+
+    await new Promise((resolve) => {
+      server = http.createServer(app);
+      server.listen(0, '127.0.0.1', () => {
+        const port = server.address().port;
+        BASE_URL = `http://127.0.0.1:${port}`;
+        resolve();
+      });
     });
-  });
-  console.log(`  ✓ Application server listening at ${BASE_URL}`);
+    console.log(`  ✓ Application server listening at ${BASE_URL}`);
 
-  // Step 2: /api/health verification
-  console.log('\n[Step 2] Verifying /api/health reports ready when connected...');
-  const healthRes = await fetch(`${BASE_URL}/api/health`);
+    // Step 2: /api/health verification
+    console.log('\n[Step 2] Verifying /api/health reports ready when connected...');
+    const healthRes = await fetch(`${BASE_URL}/api/health`);
   assert.strictEqual(healthRes.status, 200);
   const healthData = await healthRes.json();
   assert.strictEqual(healthData.status, 'healthy');
@@ -108,42 +135,46 @@ async function runFinalSmokeTest() {
   let formSlug = null;
   let feedbackId = null;
 
-  try {
-    // Step 4: Register New User & College
-    console.log('\n[Step 4] Registering a new college administrator account via real API...');
-    const registerPayload = {
-      businessName: `Apex Final Smoke University ${testStamp}`,
-      businessType: 'college',
-      ownerName: 'Dr. Smoke Tester',
-      email: testEmail,
-      password: 'SmokePassword@2026',
-      isOnlineOnly: false,
-      address: {
-        addressLine1: 'Campus Sector 42',
-        city: 'Academic City',
-        state: 'State',
-        postalCode: '110001',
-        country: 'India'
-      }
-    };
+  // Step 4: Register New User & College
+  console.log('\n[Step 4] Registering a new college administrator account via real API...');
+  const registerPayload = {
+    businessName: `Apex Final Smoke University ${testStamp}`,
+    businessType: 'college',
+    ownerName: 'Dr. Smoke Tester',
+    email: testEmail,
+    password: 'SmokePassword@2026',
+    isOnlineOnly: false,
+    address: {
+      addressLine1: 'Campus Sector 42',
+      city: 'Academic City',
+      state: 'State',
+      postalCode: '110001',
+      country: 'India'
+    }
+  };
 
-    const regRes = await fetch(`${BASE_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(registerPayload)
-    });
+  const regRes = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(registerPayload)
+  });
 
-    assert.strictEqual(regRes.status, 201, 'Registration must return HTTP 201 Created');
-    const regData = await regRes.json();
-    assert.ok(regData.token, 'Registration must issue a JWT token');
-    assert.strictEqual(regData.user.email, testEmail);
-    assert.strictEqual(regData.business.type, 'college');
+  assert.strictEqual(regRes.status, 201, 'Registration must return HTTP 201 Created');
+  const regData = await regRes.json();
+  assert.ok(regData.token, 'Registration must issue a JWT token');
+  assert.strictEqual(regData.user.email, testEmail);
+  assert.strictEqual(regData.business.type, 'college');
 
-    bizId = regData.business._id || regData.business.id;
-    userId = regData.user.id || regData.user._id;
-    const firstFormId = regData.firstForm ? (regData.firstForm._id || regData.firstForm.id) : null;
-    const firstLocationId = regData.firstLocation ? (regData.firstLocation._id || regData.firstLocation.id) : null;
-    console.log(`  ✓ Successfully registered user "${testEmail}" (Business ID: ${bizId})`);
+  bizId = regData.business._id || regData.business.id;
+  userId = regData.user.id || regData.user._id;
+  const firstFormId = regData.firstForm ? (regData.firstForm._id || regData.firstForm.id) : null;
+  const firstLocationId = regData.firstLocation ? (regData.firstLocation._id || regData.firstLocation.id) : null;
+
+  if (bizId) created.businesses.push(bizId);
+  if (userId) created.users.push(userId);
+  if (firstFormId) created.forms.push(firstFormId);
+  if (firstLocationId) created.locations.push(firstLocationId);
+  console.log(`  ✓ Successfully registered user "${testEmail}" (Business ID: ${bizId})`);
 
     // Step 5: Log in with credentials and verify access isolation
     console.log('\n[Step 5] Logging in with newly created credentials...');
@@ -209,6 +240,7 @@ async function runFinalSmokeTest() {
     const createdFormData = createdResData.form || createdResData;
     formId = createdFormData._id || createdFormData.id;
     formSlug = createdFormData.slug;
+    if (formId) created.forms.push(formId);
     assert.strictEqual(createdFormData.status, 'draft', 'New form must be initialized in draft status');
 
     // Publish the form
@@ -276,6 +308,7 @@ async function runFinalSmokeTest() {
     assert.strictEqual(validSubmitRes.status, 201);
     const submitResult = await validSubmitRes.json();
     feedbackId = submitResult.feedback ? (submitResult.feedback._id || submitResult.feedback.id) : null;
+    if (feedbackId) created.feedbacks.push(feedbackId);
     assert.ok(submitResult.success);
     console.log('  ✓ Valid academic feedback submitted successfully with rating 5 and NPS 10');
 
@@ -321,24 +354,84 @@ async function runFinalSmokeTest() {
     assert.strictEqual(superadminEscalationRes.status, 403, 'Superadmin escalation via demo switch must be strictly 403');
     console.log('  ✓ Superadmin elevation rejected with HTTP 403 Forbidden');
 
+  } catch (err) {
+    testError = err;
+    throw err;
   } finally {
     // Teardown: Clean up test artifacts
     console.log('\n[Step 13] Cleaning up smoke test artifacts...');
-    if (formId) await FeedbackForm.deleteOne({ _id: formId }).catch(() => {});
-    if (typeof firstFormId !== 'undefined' && firstFormId) await FeedbackForm.deleteOne({ _id: firstFormId }).catch(() => {});
-    if (bizId) await FeedbackForm.deleteMany({ businessId: bizId }).catch(() => {});
-    if (typeof firstLocationId !== 'undefined' && firstLocationId) await Location.deleteOne({ _id: firstLocationId }).catch(() => {});
-    if (bizId) await Location.deleteMany({ businessId: bizId }).catch(() => {});
-    if (formId) await Feedback.deleteMany({ formId }).catch(() => {});
-    if (bizId) await Feedback.deleteMany({ businessId: bizId }).catch(() => {});
-    if (bizId) await AuditLog.deleteMany({ businessId: bizId }).catch(() => {});
-    if (userId) await User.deleteOne({ _id: userId }).catch(() => {});
-    if (bizId) await User.deleteMany({ businessId: bizId }).catch(() => {});
-    if (bizId) await Business.deleteOne({ _id: bizId }).catch(() => {});
-    console.log('  ✓ All smoke test artifacts cleaned up cleanly');
+    const cleanupErrors = [];
 
-    if (server) await new Promise((resolve) => server.close(resolve)).catch(() => {});
-    await closeDB().catch(() => {});
+    const cleanupStep = async (description, action) => {
+      try {
+        await action();
+      } catch (err) {
+        console.error(`[Teardown Failure] ${description}:`, err.message);
+        cleanupErrors.push({ description, error: err });
+      }
+    };
+
+    if (created.feedbacks.length > 0) {
+      await cleanupStep('Delete created feedbacks', () =>
+        Feedback.deleteMany({ _id: { $in: created.feedbacks } })
+      );
+    }
+    if (created.forms.length > 0) {
+      await cleanupStep('Delete created forms', () =>
+        FeedbackForm.deleteMany({ _id: { $in: created.forms } })
+      );
+    }
+    if (created.locations.length > 0) {
+      await cleanupStep('Delete created locations', () =>
+        Location.deleteMany({ _id: { $in: created.locations } })
+      );
+    }
+    if (created.users.length > 0) {
+      await cleanupStep('Delete created users', () =>
+        User.deleteMany({ _id: { $in: created.users } })
+      );
+    }
+    if (created.businesses.length > 0) {
+      await cleanupStep('Delete created businesses', () =>
+        Business.deleteMany({ _id: { $in: created.businesses } })
+      );
+      await cleanupStep('Delete audit logs for created businesses', () =>
+        AuditLog.deleteMany({ businessId: { $in: created.businesses } })
+      );
+    }
+    if (created.auditLogs.length > 0) {
+      await cleanupStep('Delete created audit logs', () =>
+        AuditLog.deleteMany({ _id: { $in: created.auditLogs } })
+      );
+    }
+
+    // Await Express server closure before closing MongoDB connection
+    if (server && server.listening) {
+      await cleanupStep('Shutdown Express HTTP server', () =>
+        new Promise((resolve, reject) => {
+          server.close((err) => (err ? reject(err) : resolve()));
+        })
+      );
+    }
+
+    // Close MongoDB connection
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState !== 0) {
+      await cleanupStep('Close MongoDB connection', () =>
+        mongoose.connection.close()
+      );
+    }
+
+    if (cleanupErrors.length > 0) {
+      const cleanupSummary = cleanupErrors.map((e) => `${e.description}: ${e.error.message}`).join('; ');
+      if (testError) {
+        console.error(`[Teardown Warning] Cleanup had failures after smoke test assertion failed: ${cleanupSummary}`);
+      } else {
+        throw new Error(`Smoke test passed but teardown cleanup failed: ${cleanupSummary}`);
+      }
+    } else {
+      console.log('  ✓ All smoke test artifacts cleaned up cleanly');
+    }
   }
 
   console.log('\n===============================================================');
