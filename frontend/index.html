@@ -332,6 +332,11 @@
              VIEW: DASHBOARD
              ========================================== -->
         <section id="view-dashboard" class="hidden">
+          <!-- College Onboarding / Draft Setup Banner -->
+          <div id="collegeOnboardingBanner" class="hidden" style="margin-bottom: 20px; padding: 18px 20px; background: linear-gradient(135deg, #eef2ff, #f8fafc); border: 1.5px solid #a5b4fc; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+            <!-- Populated dynamically by app.js -->
+          </div>
+
           <!-- Filter Toolbar (Location + Time Period) -->
           <div class="filter-toolbar">
             <div class="filter-group">
@@ -551,6 +556,11 @@
             </div>
           </div>
 
+          <!-- College Form Draft / Configuration Notice -->
+          <div id="builderCollegeNotice" class="hidden" style="margin-bottom: 18px; padding: 14px 18px; background-color: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: var(--radius-md);">
+            <!-- Populated dynamically by app.js -->
+          </div>
+
           <!-- Form Settings Card -->
           <div class="card" style="margin-bottom: 18px;">
             <h3 class="h3" style="margin-bottom: 14px;">Form General Settings</h3>
@@ -629,9 +639,15 @@
                   <input type="checkbox" id="cfgCategory" style="width: 18px; height: 18px;"> Feedback Category
                 </label>
               </div>
-              <div style="border-top: 1px solid var(--neutral-200); padding-top: 10px;">
+              <div style="border-top: 1px solid var(--neutral-200); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 600;">
                   <input type="checkbox" id="cfgAllowAnonymous" style="width: 18px; height: 18px;"> Allow Anonymous Submissions (Student name and contact info become optional)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 600;">
+                  <input type="checkbox" id="cfgShowOverallRating" style="width: 18px; height: 18px;"> Enable Overall Star Rating Selector (1 - 5 Stars)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; margin-left: 26px;">
+                  <input type="checkbox" id="cfgRequireOverallRating" style="width: 18px; height: 18px;"> Require Overall Star Rating
                 </label>
               </div>
             </div>

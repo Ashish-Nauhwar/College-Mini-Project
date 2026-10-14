@@ -387,6 +387,9 @@ router.post('/register', async (req, res) => {
       ];
     }
 
+    // College forms start in "draft" mode until faculty & subjects are configured
+    const initialFormStatus = bType === 'college' ? 'draft' : 'published';
+
     createdForm = await db.createForm({
       businessId: bizId,
       locationId: createdLocation._id || createdLocation.id,
@@ -396,8 +399,10 @@ router.post('/register', async (req, res) => {
         ? 'We value student feedback to foster academic excellence. Responses are reviewed for curriculum and campus improvements.'
         : 'Thank you for visiting! Your feedback helps us deliver an outstanding experience.',
       formType: bType === 'college' ? 'college' : 'general',
-      status: 'published',
+      status: initialFormStatus,
       allowAnonymous: true,
+      showOverallRating: true,
+      requireOverallRating: true,
       collegeFieldsConfig,
       questions: defaultQuestions
     });

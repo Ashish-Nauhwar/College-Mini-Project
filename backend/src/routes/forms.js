@@ -482,6 +482,8 @@ router.post('/', requireAuth, requireRole('owner', 'college_admin', 'superadmin'
       status: initialStatus,
       googleReviewUrl: googleReviewUrl ? googleReviewUrl.trim() : '',
       allowAnonymous: allowAnonymous !== false,
+      showOverallRating: req.body.showOverallRating !== false,
+      requireOverallRating: req.body.requireOverallRating !== false,
       collegeFieldsConfig: collegeFieldsConfig || {},
       questions: qValidation.questions
     });
@@ -574,6 +576,8 @@ router.put('/:id', requireAuth, requireRole('owner', 'college_admin', 'superadmi
     if (formType) updates.formType = formType;
     if (googleReviewUrl !== undefined) updates.googleReviewUrl = googleReviewUrl.trim();
     if (allowAnonymous !== undefined) updates.allowAnonymous = Boolean(allowAnonymous);
+    if (req.body.showOverallRating !== undefined) updates.showOverallRating = Boolean(req.body.showOverallRating);
+    if (req.body.requireOverallRating !== undefined) updates.requireOverallRating = Boolean(req.body.requireOverallRating);
     if (collegeFieldsConfig !== undefined) updates.collegeFieldsConfig = collegeFieldsConfig;
 
     if (questions !== undefined) {
@@ -644,6 +648,53 @@ async function handleStateTransition(req, res, targetStatus, actionName) {
       const qValidation = validateQuestionGraph(form.questions);
       if (qValidation.error) {
         return res.status(400).json({ error: `Cannot publish form: ${qValidation.error}` });
+      }
+
+      // Check choice/select/checkbox questions have at least 1 option
+      for (let i = 0; i < form.questions.length; i++) {
+        const q = form.questions[i];
+        if (['choice', 'select', 'checkbox'].includes(q.type)) {
+          const validOpts = (q.options || []).filter(o => o && String(o).trim());
+          if (validOpts.length === 0) {
+            return res.status(400).json({
+              error: `Cannot publish form: Question #${i + 1} ("${q.text}") requires at least one selectable option.`
+            });
+          }
+        }
+      }
+
+      // If college form or college fields enabled, check that enabled & required fields have configured options
+      const business = await db.getBusinessById(form.businessId);
+      const acConfig = business?.academicConfig || {};
+      const cfConfig = form.collegeFieldsConfig || {};
+
+      const academicFieldDefs = [
+        { key: 'department', label: 'Department / Branch', options: acConfig.departments },
+        { key: 'course', label: 'Course / Program', options: acConfig.courses },
+        { key: 'academicYear', label: 'Academic Year', options: acConfig.academicYears || acConfig.academicYear },
+        { key: 'yearOfStudy', label: 'Year of Study', options: acConfig.years || acConfig.yearsOfStudy },
+        { key: 'semester', label: 'Semester', options: acConfig.semesters },
+        { key: 'section', label: 'Class / Section', options: acConfig.sections },
+        { key: 'faculty', label: 'Faculty Member', options: acConfig.faculty },
+        { key: 'subject', label: 'Subject / Course Unit', options: acConfig.subjects },
+        { key: 'category', label: 'Feedback Category', options: acConfig.feedbackCategories || acConfig.categories }
+      ];
+
+      const missingAcademicConfigs = [];
+      for (const field of academicFieldDefs) {
+        const isEnabled = cfConfig[`${field.key}Enabled`];
+        const isRequired = cfConfig[`${field.key}Required`];
+        if (isEnabled && isRequired) {
+          if (!Array.isArray(field.options) || field.options.length === 0) {
+            missingAcademicConfigs.push(field.label);
+          }
+        }
+      }
+
+      if (missingAcademicConfigs.length > 0) {
+        return res.status(400).json({
+          error: `Cannot publish form: The following required academic fields have no options configured in Business Settings: ${missingAcademicConfigs.join(', ')}. Please configure your institution's academic data in Settings before publishing.`
+        });
       }
     }
 

@@ -45,7 +45,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FALLBACK_DNS ===
 }
 
 const { isDisposableDatabase } = require('../scripts/seed');
-const { Business, User, FeedbackForm, Feedback } = require('../src/models');
+const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('../src/models');
 const { generateToken } = require('../src/middleware/auth');
 const { hashPassword } = require('../src/utils/crypto');
 const { calculateAverageRating, calculateNps } = require('../src/utils/analyticsHelper');
@@ -84,8 +84,10 @@ async function runRealMongoIntegrationTest() {
   const created = {
     businesses: [],
     users: [],
+    locations: [],
     forms: [],
-    feedbacks: []
+    feedbacks: [],
+    auditLogs: []
   };
 
   let server;
@@ -370,21 +372,8 @@ async function runRealMongoIntegrationTest() {
     assert.strictEqual(crossTenantPut.status, 403, 'Cross-tenant form update must be blocked with HTTP 403');
     console.log('  ✓ Cross-tenant access strictly prevented with HTTP 403 Forbidden');
 
-    // Step 16: Teardown test documents by ID
-    console.log('[Step 16] Performing deterministic teardown of test records by ID...');
-    if (created.feedbacks.length > 0) {
-      await Feedback.deleteMany({ _id: { $in: created.feedbacks } });
-    }
-    if (created.forms.length > 0) {
-      await FeedbackForm.deleteMany({ _id: { $in: created.forms } });
-    }
-    if (created.users.length > 0) {
-      await User.deleteMany({ _id: { $in: created.users } });
-    }
-    if (created.businesses.length > 0) {
-      await Business.deleteMany({ _id: { $in: created.businesses } });
-    }
-    console.log('  ✓ All test documents cleanly deleted by ID without touching unrelated data');
+    // Step 16: Verification complete, proceeding to teardown
+    console.log('[Step 16] All integration assertions completed successfully.');
 
     console.log('\n===============================================================');
     console.log('>>> [PASS] All 16 Live MongoDB Atlas Integration Steps Passed!  ');
@@ -392,6 +381,33 @@ async function runRealMongoIntegrationTest() {
 
     return { skipped: false, testsRun: 16, passed: 16 };
   } finally {
+    // Teardown: Clean up test documents by ID inside finally block
+    console.log('[Teardown] Performing deterministic teardown of test records by ID...');
+    try {
+      if (created.feedbacks.length > 0) {
+        await Feedback.deleteMany({ _id: { $in: created.feedbacks } }).catch(() => {});
+      }
+      if (created.forms.length > 0) {
+        await FeedbackForm.deleteMany({ _id: { $in: created.forms } }).catch(() => {});
+      }
+      if (created.locations.length > 0) {
+        await Location.deleteMany({ _id: { $in: created.locations } }).catch(() => {});
+      }
+      if (created.users.length > 0) {
+        await User.deleteMany({ _id: { $in: created.users } }).catch(() => {});
+      }
+      if (created.businesses.length > 0) {
+        await Business.deleteMany({ _id: { $in: created.businesses } }).catch(() => {});
+        await AuditLog.deleteMany({ businessId: { $in: created.businesses } }).catch(() => {});
+      }
+      if (created.auditLogs.length > 0) {
+        await AuditLog.deleteMany({ _id: { $in: created.auditLogs } }).catch(() => {});
+      }
+      console.log('  ✓ All test documents cleanly deleted by ID without touching unrelated data');
+    } catch (e) {
+      console.error('  Warning during teardown:', e.message);
+    }
+
     // Teardown server and close connection
     if (server) {
       server.close();

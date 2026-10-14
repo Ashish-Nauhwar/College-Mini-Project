@@ -53,6 +53,7 @@ async function main() {
     { name: 'Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]', file: 'phase5-rbac-lifecycle-tests.js' },
     { name: 'Phase 7 Signup & Routing Resilience [App & DB Check]', file: 'phase7-signup-routing-tests.js' },
     { name: 'Phase 8 Production Safety & E2E Verification [Express App & Safety Check]', file: 'phase8-production-safety-tests.js' },
+    { name: 'Phase 10 Release Readiness & Verification [Express App & Onboarding Check]', file: 'phase10-release-verification-tests.js' },
     { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' },
     { name: 'Final 13-Step Release Smoke Verification [Live Database]', file: 'smoke-test-final.js' }
   ];

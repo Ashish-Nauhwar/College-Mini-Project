@@ -123,13 +123,26 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/qr', qrRoutes);
 
+// Unknown API route fallback: returns JSON 404 (never HTML)
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `API endpoint "${req.method} ${req.path}" not found` });
+});
+
 // Public Feedback Form route: /feedback/:slug
 app.get('/feedback/:slug', (req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, 'feedback.html'));
 });
 
+// Static asset 404 handler (prevents returning index.html for missing .js, .css, images, etc.)
+app.use((req, res, next) => {
+  if (req.path.match(/\.[a-zA-Z0-9]+$/)) {
+    return res.status(404).type('text/plain').send('File not found');
+  }
+  next();
+});
+
 // Single Page Application fallback for all dashboard routes
-app.use((req, res) => {
+app.get('*', (req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 

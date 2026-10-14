@@ -34,7 +34,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FALLBACK_DNS ===
 
 const app = require('../server');
 const { connectDB, isDbConnected, closeDB } = require('../src/config/db');
-const { Business, User, Location, FeedbackForm, Feedback } = require('../src/models');
+const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('../src/models');
 
 async function runFinalSmokeTest() {
   console.log('\n===============================================================');
@@ -327,6 +327,7 @@ async function runFinalSmokeTest() {
     if (formId) await FeedbackForm.deleteOne({ _id: formId }).catch(() => {});
     if (bizId) await Location.deleteMany({ businessId: bizId }).catch(() => {});
     if (formId) await Feedback.deleteMany({ formId }).catch(() => {});
+    if (bizId) await AuditLog.deleteMany({ businessId: bizId }).catch(() => {});
     console.log('  ✓ All smoke test artifacts cleaned up cleanly');
 
     await new Promise((resolve) => server.close(resolve));

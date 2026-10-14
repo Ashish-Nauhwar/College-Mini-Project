@@ -271,32 +271,32 @@ async function handleSubmit(req, res) {
     const cfConfig = form.collegeFieldsConfig || {};
     const sanitizedAcademic = {};
 
-    // Validate Required College Fields according to form config
-    if (cfConfig.departmentRequired && (!academicDetails || !academicDetails.department)) {
+    // Validate Required College Fields according to form config (only when enabled AND required)
+    if (cfConfig.departmentEnabled && cfConfig.departmentRequired && (!academicDetails || !academicDetails.department || !String(academicDetails.department).trim())) {
       return res.status(400).json({ error: 'Department is required for this academic feedback form' });
     }
-    if (cfConfig.courseRequired && (!academicDetails || !academicDetails.course)) {
-      return res.status(400).json({ error: 'Course is required for this academic feedback form' });
+    if (cfConfig.courseEnabled && cfConfig.courseRequired && (!academicDetails || !academicDetails.course || !String(academicDetails.course).trim())) {
+      return res.status(400).json({ error: 'Course / Program is required for this academic feedback form' });
     }
-    if (cfConfig.academicYearRequired && (!academicDetails || !academicDetails.academicYear)) {
+    if (cfConfig.academicYearEnabled && cfConfig.academicYearRequired && (!academicDetails || !academicDetails.academicYear || !String(academicDetails.academicYear).trim())) {
       return res.status(400).json({ error: 'Academic Year is required for this academic feedback form' });
     }
-    if (cfConfig.yearOfStudyRequired && (!academicDetails || !academicDetails.yearOfStudy)) {
+    if (cfConfig.yearOfStudyEnabled && cfConfig.yearOfStudyRequired && (!academicDetails || !academicDetails.yearOfStudy || !String(academicDetails.yearOfStudy).trim())) {
       return res.status(400).json({ error: 'Year of study is required for this academic feedback form' });
     }
-    if (cfConfig.semesterRequired && (!academicDetails || !academicDetails.semester)) {
+    if (cfConfig.semesterEnabled && cfConfig.semesterRequired && (!academicDetails || !academicDetails.semester || !String(academicDetails.semester).trim())) {
       return res.status(400).json({ error: 'Semester is required for this academic feedback form' });
     }
-    if (cfConfig.sectionRequired && (!academicDetails || !academicDetails.section)) {
+    if (cfConfig.sectionEnabled && cfConfig.sectionRequired && (!academicDetails || !academicDetails.section || !String(academicDetails.section).trim())) {
       return res.status(400).json({ error: 'Section is required for this academic feedback form' });
     }
-    if (cfConfig.facultyRequired && (!academicDetails || !academicDetails.faculty)) {
+    if (cfConfig.facultyEnabled && cfConfig.facultyRequired && (!academicDetails || !academicDetails.faculty || !String(academicDetails.faculty).trim())) {
       return res.status(400).json({ error: 'Faculty member is required for this academic feedback form' });
     }
-    if (cfConfig.subjectRequired && (!academicDetails || !academicDetails.subject)) {
+    if (cfConfig.subjectEnabled && cfConfig.subjectRequired && (!academicDetails || !academicDetails.subject || !String(academicDetails.subject).trim())) {
       return res.status(400).json({ error: 'Subject is required for this academic feedback form' });
     }
-    if (cfConfig.categoryRequired && (!academicDetails || !academicDetails.category)) {
+    if (cfConfig.categoryEnabled && cfConfig.categoryRequired && (!academicDetails || !academicDetails.category || !String(academicDetails.category).trim())) {
       return res.status(400).json({ error: 'Feedback category is required for this academic feedback form' });
     }
 
@@ -391,24 +391,34 @@ async function handleSubmit(req, res) {
       if (cat) sanitizedAcademic.category = cat;
     }
 
-    // Extract Star Rating (1 to 5 scale) - Do NOT fabricate 5 stars if not present!
+    // Extract Star Rating (1 to 5 scale) - Respects form configuration (Priority 3)
+    const showOverallRating = form.showOverallRating !== false;
+    const requireOverallRating = showOverallRating && form.requireOverallRating !== false;
+
     let overallRating = null;
-    if (rating !== undefined && rating !== null && rating !== '') {
-      const parsedRating = Number(rating);
-      if (!Number.isFinite(parsedRating) || !Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
-        return res.status(400).json({ error: 'Overall star rating must be an integer between 1 and 5' });
-      }
-      overallRating = parsedRating;
-    } else {
-      // Find rating question if answered
-      for (const [key, val] of Object.entries(sanitizedAnswers)) {
-        const matchingQ = form.questions.find(q => q.id === key);
-        if (matchingQ && matchingQ.type === 'rating' && typeof val === 'number') {
-          overallRating = val;
-          break;
+    if (showOverallRating) {
+      if (rating !== undefined && rating !== null && rating !== '') {
+        const parsedRating = Number(rating);
+        if (!Number.isFinite(parsedRating) || !Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+          return res.status(400).json({ error: 'Overall star rating must be an integer between 1 and 5' });
+        }
+        overallRating = parsedRating;
+      } else {
+        // When showOverallRating is enabled, allow rating question fallback if body.rating wasn't explicitly supplied
+        for (const [key, val] of Object.entries(sanitizedAnswers)) {
+          const matchingQ = form.questions.find(q => q.id === key);
+          if (matchingQ && matchingQ.type === 'rating' && typeof val === 'number') {
+            overallRating = val;
+            break;
+          }
+        }
+        if (overallRating === null && requireOverallRating) {
+          return res.status(400).json({ error: 'Overall star rating is required for this feedback form' });
         }
       }
     }
+    // When showOverallRating is false, overallRating remains null.
+    // Individual rating question answers are preserved in sanitizedAnswers/answers, but NOT copied into overallRating.
 
     // Extract NPS responses (0 to 10 scale)
     const npsAnswersMap = new Map();

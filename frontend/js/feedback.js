@@ -67,9 +67,28 @@
       // Render all dynamic questions
       renderDynamicQuestions(currentForm.questions || []);
 
+      // Configure overall star rating selector based on form settings (Priority 3)
+      const showOverallRating = currentForm.showOverallRating !== false;
+      const requireOverallRating = showOverallRating && currentForm.requireOverallRating !== false;
+      const ratingGroup = document.getElementById('ratingQuestionGroup');
+      const ratingLabel = document.getElementById('primaryRatingLabel');
+
+      if (ratingGroup) {
+        if (!showOverallRating) {
+          ratingGroup.classList.add('hidden');
+        } else {
+          ratingGroup.classList.remove('hidden');
+          if (ratingLabel) {
+            ratingLabel.innerHTML = `Overall Experience Rating ${requireOverallRating ? '<span class="required">*</span>' : '<span class="text-muted" style="font-size:0.8rem; font-weight:normal;">(Optional)</span>'}`;
+          }
+        }
+      }
+
       loadingEl.classList.add('hidden');
       formEl.classList.remove('hidden');
-      initStarSelector();
+      if (showOverallRating) {
+        initStarSelector();
+      }
       evaluateAllConditions();
     } catch (err) {
       loadingEl.classList.add('hidden');
@@ -437,32 +456,61 @@
     e.preventDefault();
 
     let hasErrors = false;
+    let firstInvalidField = null;
 
-    // Validate Star Rating
-    if (!selectedRating) {
-      document.getElementById('ratingError').classList.remove('hidden');
+    // Validate Star Rating (Priority 3)
+    const showOverallRating = currentForm.showOverallRating !== false;
+    const requireOverallRating = showOverallRating && currentForm.requireOverallRating !== false;
+
+    if (showOverallRating && requireOverallRating && !selectedRating) {
+      const ratingErr = document.getElementById('ratingError');
+      if (ratingErr) ratingErr.classList.remove('hidden');
       hasErrors = true;
+      if (!firstInvalidField) {
+        firstInvalidField = document.getElementById('starSelector');
+      }
     } else {
-      document.getElementById('ratingError').classList.add('hidden');
+      const ratingErr = document.getElementById('ratingError');
+      if (ratingErr) ratingErr.classList.add('hidden');
     }
 
-    // Validate College Fields if required
+    // Validate All 9 College Academic Fields (Priority 2)
     const cfConfig = currentForm?.collegeFieldsConfig || {};
-    if (cfConfig.departmentRequired && !academicDetails.department) {
-      const err = document.getElementById('error_acad_department');
-      if (err) err.classList.remove('hidden');
-      hasErrors = true;
-    }
-    if (cfConfig.facultyRequired && !academicDetails.faculty) {
-      const err = document.getElementById('error_acad_faculty');
-      if (err) err.classList.remove('hidden');
-      hasErrors = true;
-    }
-    if (cfConfig.subjectRequired && !academicDetails.subject) {
-      const err = document.getElementById('error_acad_subject');
-      if (err) err.classList.remove('hidden');
-      hasErrors = true;
-    }
+    const academicFieldDefs = [
+      { key: 'department', label: 'Department / Branch' },
+      { key: 'course', label: 'Course / Program' },
+      { key: 'academicYear', label: 'Academic Year' },
+      { key: 'yearOfStudy', label: 'Year of Study' },
+      { key: 'semester', label: 'Semester' },
+      { key: 'section', label: 'Class / Section' },
+      { key: 'faculty', label: 'Faculty Member' },
+      { key: 'subject', label: 'Subject / Course Unit' },
+      { key: 'category', label: 'Feedback Category' }
+    ];
+
+    academicFieldDefs.forEach(({ key, label }) => {
+      const isEnabled = cfConfig[`${key}Enabled`];
+      const isRequired = cfConfig[`${key}Required`];
+      const errEl = document.getElementById(`error_acad_${key}`);
+
+      if (isEnabled && isRequired) {
+        const val = academicDetails[key];
+        if (!val || !String(val).trim()) {
+          if (errEl) {
+            errEl.textContent = `Please select ${label.toLowerCase()}`;
+            errEl.classList.remove('hidden');
+          }
+          hasErrors = true;
+          if (!firstInvalidField) {
+            firstInvalidField = document.getElementById(`acad_${key}`);
+          }
+        } else {
+          if (errEl) errEl.classList.add('hidden');
+        }
+      } else {
+        if (errEl) errEl.classList.add('hidden');
+      }
+    });
 
     // Validate Required Dynamic Questions that are currently visible
     if (currentForm && currentForm.questions) {
@@ -476,6 +524,12 @@
             const err = document.getElementById(`error_${q.id}`);
             if (err) err.classList.remove('hidden');
             hasErrors = true;
+            if (!firstInvalidField) {
+              firstInvalidField = document.getElementById(`inp_${q.id}`) || wrap;
+            }
+          } else {
+            const err = document.getElementById(`error_${q.id}`);
+            if (err) err.classList.add('hidden');
           }
         }
       });
@@ -483,18 +537,28 @@
 
     // Email validation if entered
     const emailInput = document.getElementById('customerEmail');
-    const emailVal = emailInput.value.trim();
+    const emailVal = emailInput ? emailInput.value.trim() : '';
     if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
-      document.getElementById('emailError').classList.remove('hidden');
+      document.getElementById('emailError')?.classList.remove('hidden');
       hasErrors = true;
+      if (!firstInvalidField) {
+        firstInvalidField = emailInput;
+      }
     } else {
-      document.getElementById('emailError').classList.add('hidden');
+      document.getElementById('emailError')?.classList.add('hidden');
     }
 
     if (hasErrors) {
-      const firstError = document.querySelector('.form-error:not(.hidden)');
-      if (firstError) {
-        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (firstInvalidField) {
+        if (typeof firstInvalidField.focus === 'function') {
+          firstInvalidField.focus();
+        }
+        firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        const firstError = document.querySelector('.form-error:not(.hidden)');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
       return;
     }
@@ -516,7 +580,7 @@
 
     const payload = {
       formId: currentForm._id || currentForm.id,
-      rating: selectedRating,
+      rating: showOverallRating ? (selectedRating > 0 ? selectedRating : null) : null,
       customerName: document.getElementById('customerName').value.trim() || 'Anonymous',
       customerEmail: emailVal,
       customerPhone: document.getElementById('customerPhone').value.trim(),

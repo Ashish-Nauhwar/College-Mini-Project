@@ -210,6 +210,36 @@ npm start
 
 ---
 
+## 🎓 College Onboarding & Form Publication Workflow
+
+FeedbackHub provides a verified onboarding workflow tailored for academic institutions:
+1. **Initial Draft Protection**: When a new college registers, their initial course evaluation form is provisioned in `draft` status (unlike non-college businesses which receive a published starter form). This prevents exposing unfillable public forms when faculty and course units are not yet defined.
+2. **Setup Guidance Banner**: The college dashboard surfaces an onboarding banner directing administrators through:
+   * **Step 1**: Add institution departments, courses, faculty members, and subjects in **Business Settings** (`#/settings`).
+   * **Step 2**: Preview and publish the starter evaluation form in **Form Builder** (`#/builder`).
+   * **Step 3**: Download or print high-resolution QR codes in **QR Codes** (`#/qr`).
+3. **Publication Safety Guard**: The backend strictly guards form publication (`PUT /api/forms/:id/publish`). It blocks transition to `published` with HTTP 400 if:
+   * Any choice, select, or checkbox question has zero selectable options.
+   * Any enabled & required college academic field (e.g. Faculty, Subject, Department) has zero configured options in Business Settings.
+
+---
+
+## ⭐ Overall Rating Configuration & Metric Integrity
+
+* **Form-Level Controls**:
+  * Form builders can configure `showOverallRating` and `requireOverallRating` checkboxes in Form Builder settings.
+  * When `showOverallRating: false`, the public form hides the 5-star rating widget, does not require an overall rating, and keeps `feedback.rating = null`.
+* **Segregated Question Ratings & Clean Averages**:
+  * Individual rating questions in `answers` (e.g., teaching clarity, infrastructure) are preserved without being copied or stolen into `feedback.rating`.
+  * `calculateAverageRating` calculates the arithmetic mean strictly across submissions that contain an overall rating, excluding `null` unrated submissions from the denominator.
+* **Route Ordering & Clean 404 Responses**:
+  * Unknown `/api/*` endpoints return structured JSON HTTP 404 (`{ "error": "API endpoint ... not found" }`), never HTML.
+  * Missing static assets (`.js`, `.css`, images) return HTTP 404 text, preventing SPA fallback masking.
+  * Public form URLs `/feedback/:slug` serve `feedback.html`.
+  * Dashboard client routes serve `index.html`.
+
+---
+
 ## 🧪 Automated Testing Architecture
 
 ### Diagnostics Command
@@ -237,17 +267,32 @@ Executes all automated suites with comprehensive summary accounting:
  7. Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]                     : PASS ✓
  8. Phase 7 Signup & Routing Resilience [App & DB Check]                    : PASS ✓
  9. Phase 8 Production Safety & E2E Verification [Express App & Safety Check]: PASS ✓
-10. Real MongoDB Atlas Integration [Live Database]                          : SKIPPED (requires TEST_MONGODB_URI configured)
-11. Final 13-Step Release Smoke Verification [Live Database]                : SKIPPED (requires TEST_MONGODB_URI configured)
+10. Phase 10 Release Readiness & Verification [Express App & Onboarding Check]: PASS ✓
+11. Real MongoDB Atlas Integration [Live Database]                          : SKIPPED (requires TEST_MONGODB_URI configured)
+12. Final 13-Step Release Smoke Verification [Live Database]                : SKIPPED (requires TEST_MONGODB_URI configured)
 =============================================================================
-Verification Tally: 9 Passed | 2 Skipped (Live DB optional) | 0 Failed
+Verification Tally: 10 Passed | 2 Skipped (Live DB optional) | 0 Failed
 =============================================================================
 ```
 
+### Strict Release Gating Command
+For pre-deployment release verification where skipping live database tests is prohibited:
+```bash
+npm run verify:release
+```
+> [!IMPORTANT]
+> `npm run verify:release` requires `TEST_MONGODB_URI` pointing to a disposable test database (e.g. `mongodb+srv://.../feedbackhub_test`). If `TEST_MONGODB_URI` is missing or any live test is skipped, `verify:release` fails with exit code 1.
+
 ### Individual Test Suites
 ```bash
-# Master Test Runner (All Suites)
+# Master Test Runner (All Active Suites)
 npm test
+
+# Strict Release Gating (Fails if TEST_MONGODB_URI is missing or live tests are skipped)
+npm run verify:release
+
+# Phase 10 Release Readiness & Usability
+npm run test:phase10
 
 # Phase 8 Production Safety, Mock DB Prohibition & E2E Registration
 npm run test:phase8
@@ -270,9 +315,6 @@ npm run test:smoke
 # Multi-Device Responsive UI Verification (320px - 1440px)
 npm run test:responsive
 ```
-
-> [!NOTE]
-> Tests that create, mutate, or teardown database records require `TEST_MONGODB_URI` pointing to a disposable database (e.g. `mongodb+srv://.../feedbackhub_test`). If unconfigured, live database suites cleanly report `SKIPPED` rather than failing or modifying production/development data.
 
 ---
 

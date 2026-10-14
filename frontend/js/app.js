@@ -383,6 +383,41 @@ const app = (function () {
 
       renderDashboardCharts(analyticsData.timeline, analyticsData.sentimentCounts);
       renderRecentFeedbacks(fbRes.feedbacks.slice(0, 5));
+
+      // Render college onboarding banner if academic setup is in progress (Priority 1)
+      const onboardingEl = document.getElementById('collegeOnboardingBanner');
+      if (onboardingEl) {
+        if (currentBusiness?.type === 'college') {
+          const draftCollegeForm = forms.find(f => (f.formType === 'college' || f.collegeFieldsConfig?.departmentEnabled) && f.status === 'draft');
+          const missingFac = !currentBusiness.academicConfig?.faculty || currentBusiness.academicConfig.faculty.length === 0;
+          const missingSub = !currentBusiness.academicConfig?.subjects || currentBusiness.academicConfig.subjects.length === 0;
+
+          if (draftCollegeForm || missingFac || missingSub) {
+            onboardingEl.innerHTML = `
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <div>
+                  <h4 style="font-size: 1.05rem; font-weight: 700; color: #3730a3; margin: 0 0 6px 0;">
+                    🎓 College Academic Setup In Progress
+                  </h4>
+                  <p style="font-size: 0.88rem; color: #4338ca; margin: 0 0 12px 0; max-width: 720px; line-height: 1.5;">
+                    Your student evaluation feedback form is currently in <strong>Draft</strong> status. To prevent unusable surveys, forms cannot be published until your institution adds faculty members and subjects in Business Settings.
+                  </p>
+                  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <a href="#/settings" class="btn btn-primary btn-sm">⚙️ 1. Configure Faculty &amp; Subjects</a>
+                    <a href="#/builder" class="btn btn-secondary btn-sm">📝 2. Preview &amp; Publish Form</a>
+                    <a href="#/qr" class="btn btn-secondary btn-sm">📱 3. Download QR Codes</a>
+                  </div>
+                </div>
+              </div>
+            `;
+            onboardingEl.classList.remove('hidden');
+          } else {
+            onboardingEl.classList.add('hidden');
+          }
+        } else {
+          onboardingEl.classList.add('hidden');
+        }
+      }
     } catch (err) {
       console.error('Error loading dashboard:', err);
     }
@@ -871,6 +906,37 @@ const app = (function () {
       setCheckbox('cfgSubject', cfg.subjectEnabled);
       setCheckbox('cfgCategory', cfg.categoryEnabled);
       setCheckbox('cfgAllowAnonymous', currentBuilderForm.allowAnonymous !== false);
+      setCheckbox('cfgShowOverallRating', currentBuilderForm.showOverallRating !== false);
+      setCheckbox('cfgRequireOverallRating', currentBuilderForm.requireOverallRating !== false);
+
+      // Render college onboarding notice if academic configuration is incomplete
+      const noticeEl = document.getElementById('builderCollegeNotice');
+      if (noticeEl) {
+        const isCollege = currentBusiness?.type === 'college' || currentBuilderForm.formType === 'college';
+        const missingFac = !currentBusiness?.academicConfig?.faculty || currentBusiness.academicConfig.faculty.length === 0;
+        const missingSub = !currentBusiness?.academicConfig?.subjects || currentBusiness.academicConfig.subjects.length === 0;
+        const facEnabled = Boolean(cfg.facultyEnabled);
+        const subEnabled = Boolean(cfg.subjectEnabled);
+
+        if (isCollege && ((facEnabled && missingFac) || (subEnabled && missingSub))) {
+          noticeEl.innerHTML = `
+            <div style="display:flex; align-items:flex-start; gap:12px;">
+              <span style="font-size:1.4rem;">⚠️</span>
+              <div>
+                <strong style="color:#1e40af; font-size:0.95rem;">Institution Setup Required Before Publishing</strong>
+                <p style="font-size:0.85rem; color:#1e3a8a; margin:4px 0 8px 0;">
+                  This form requires faculty or subjects, but your institution currently has no faculty or subjects configured.
+                  Publishing will be blocked until options are added in Business Settings.
+                </p>
+                <a href="#/settings" class="btn btn-primary btn-sm" style="font-size:0.8rem; padding:4px 10px;">⚙️ Go to Business Settings</a>
+              </div>
+            </div>
+          `;
+          noticeEl.classList.remove('hidden');
+        } else {
+          noticeEl.classList.add('hidden');
+        }
+      }
 
       renderBuilderQuestions();
     } catch (err) {
@@ -928,6 +994,8 @@ const app = (function () {
       setCheckbox('cfgSubject', cfg.subjectEnabled);
       setCheckbox('cfgCategory', cfg.categoryEnabled);
       setCheckbox('cfgAllowAnonymous', true);
+      setCheckbox('cfgShowOverallRating', chosen.showOverallRating !== false);
+      setCheckbox('cfgRequireOverallRating', chosen.requireOverallRating !== false);
 
       renderBuilderQuestions();
       showToast(`Applied "${chosen.name}" template successfully!`, 'success');
@@ -1188,6 +1256,8 @@ const app = (function () {
       googleReviewUrl: document.getElementById('builderGoogleUrl').value.trim(),
       collegeFieldsConfig,
       allowAnonymous: document.getElementById('cfgAllowAnonymous')?.checked !== false,
+      showOverallRating: document.getElementById('cfgShowOverallRating')?.checked !== false,
+      requireOverallRating: document.getElementById('cfgRequireOverallRating')?.checked !== false,
       questions: currentBuilderForm.questions
     };
 

@@ -120,6 +120,14 @@ const feedbackFormSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    showOverallRating: {
+      type: Boolean,
+      default: true
+    },
+    requireOverallRating: {
+      type: Boolean,
+      default: true
+    },
     googleReviewUrl: {
       type: String,
       trim: true,
