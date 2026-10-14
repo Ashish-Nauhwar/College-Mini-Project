@@ -17,11 +17,6 @@ const http = require('http');
 const dns = require('dns');
 const dotenv = require('dotenv');
 
-// Public DNS fallback for Windows local router SRV resolution
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch (_) {}
-
 // Locate environment files (same resolution order as backend/server.js)
 const backendEnvPath = path.resolve(__dirname, '..', '.env');
 const rootEnvPath = path.resolve(__dirname, '..', '..', '.env');
@@ -33,6 +28,17 @@ if (fs.existsSync(backendEnvPath)) {
 } else if (fs.existsSync(rootEnvPath)) {
   detectedEnvPath = rootEnvPath;
   dotenv.config({ path: rootEnvPath });
+} else {
+  dotenv.config();
+}
+
+// DNS resolver configuration: Operating system default unless explicitly opted into fallback in dev
+let fallbackDnsActive = false;
+if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FALLBACK_DNS === 'true') {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+    fallbackDnsActive = true;
+  } catch (_) {}
 }
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -143,7 +149,8 @@ async function runDiagnostics() {
     console.log(`    Ensure backend/.env is created from backend/.env.example`);
     hasErrors = true;
   }
-  console.log(`  ✓ NODE_ENV: ${NODE_ENV}\n`);
+  console.log(`  ✓ NODE_ENV: ${NODE_ENV}`);
+  console.log(`  ✓ DNS Resolver: ${fallbackDnsActive ? 'Public Fallback (8.8.8.8, 1.1.1.1, 8.8.4.4)' : 'Operating System Default'}\n`);
 
   // 2. Configured Port and Availability
   console.log('[2/5] Server Port Availability:');

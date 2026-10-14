@@ -27,13 +27,15 @@ const assert = require('assert');
 const dns = require('dns');
 const dotenv = require('dotenv');
 
-// DNS server fallback for Windows SRV resolution
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch (_) {}
-
 // Load environment configuration
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+// DNS server fallback for development when explicitly opted in
+if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FALLBACK_DNS === 'true') {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  } catch (_) {}
+}
 
 const app = require('../server');
 const { isDbConnected } = require('../src/config/db');

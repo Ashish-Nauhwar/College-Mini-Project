@@ -33,6 +33,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_must_be_32_c
 
 const app = require('../server');
 const db = require('../src/db');
+const { configureDns } = require('../src/config/db');
 const { isDisposableDatabase } = require('../scripts/seed');
 const { calculateAverageRating, calculateNps, isComplaint } = require('../src/utils/analyticsHelper');
 
@@ -92,6 +93,53 @@ async function runPhase8Tests() {
       process.env.NODE_ENV = origEnv;
     }
     assert.strictEqual(threw, true, 'Must throw error when attempting to enable mock in production');
+  });
+
+  await it('configureDns strictly prohibits fallback DNS and enforces OS DNS when NODE_ENV=production', () => {
+    const origEnv = process.env.NODE_ENV;
+    const origFallback = process.env.ENABLE_FALLBACK_DNS;
+    try {
+      process.env.NODE_ENV = 'production';
+      process.env.ENABLE_FALLBACK_DNS = 'true';
+      const result = configureDns();
+      assert.strictEqual(result.fallbackApplied, false, 'Must not apply fallback DNS in production');
+      assert.strictEqual(result.reason, 'production_enforces_os_dns', 'Must enforce OS DNS in production');
+    } finally {
+      process.env.NODE_ENV = origEnv;
+      process.env.ENABLE_FALLBACK_DNS = origFallback;
+    }
+  });
+
+  await it('configureDns preserves OS default DNS when ENABLE_FALLBACK_DNS is false or unset', () => {
+    const origEnv = process.env.NODE_ENV;
+    const origFallback = process.env.ENABLE_FALLBACK_DNS;
+    try {
+      process.env.NODE_ENV = 'development';
+      delete process.env.ENABLE_FALLBACK_DNS;
+      const resUnset = configureDns();
+      assert.strictEqual(resUnset.fallbackApplied, false, 'Must not apply fallback when unset');
+
+      process.env.ENABLE_FALLBACK_DNS = 'false';
+      const resFalse = configureDns();
+      assert.strictEqual(resFalse.fallbackApplied, false, 'Must not apply fallback when false');
+    } finally {
+      process.env.NODE_ENV = origEnv;
+      process.env.ENABLE_FALLBACK_DNS = origFallback;
+    }
+  });
+
+  await it('configureDns applies fallback DNS in non-production when ENABLE_FALLBACK_DNS=true', () => {
+    const origEnv = process.env.NODE_ENV;
+    const origFallback = process.env.ENABLE_FALLBACK_DNS;
+    try {
+      process.env.NODE_ENV = 'development';
+      process.env.ENABLE_FALLBACK_DNS = 'true';
+      const result = configureDns();
+      assert.strictEqual(result.fallbackApplied, true, 'Must apply fallback DNS when opted-in in dev');
+    } finally {
+      process.env.NODE_ENV = origEnv;
+      process.env.ENABLE_FALLBACK_DNS = origFallback;
+    }
   });
 
   // Start ephemeral test server for real HTTP API tests

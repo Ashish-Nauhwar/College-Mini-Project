@@ -51,6 +51,10 @@ PUBLIC_APP_URL=http://localhost:3000
 
 # Demo Switcher Mode (Strictly set to false in production)
 ENABLE_DEMO_MODE=false
+
+# DNS Resolver (Default is false: uses OS DNS. Set to true in dev only if router blocks SRV)
+# Strictly prohibited in production (NODE_ENV=production always enforces OS system DNS)
+ENABLE_FALLBACK_DNS=false
 ```
 
 > [!IMPORTANT]
@@ -285,7 +289,7 @@ npm run test:responsive
 FeedbackHub is architected to deploy seamlessly as a single unified **Render Web Service** that serves both the Express backend API and the responsive vanilla frontend on the same origin.
 
 ### 1. Blueprint Deployment (`render.yaml`)
-A verified [`render.yaml`](file:///c:/Users/itsya/OneDrive/Desktop/vide%20coding/Feedback%20Project/render.yaml) blueprint is included in the project root:
+A verified [render.yaml](./render.yaml) blueprint is included in the project root:
 1. Push your repository to GitHub.
 2. In the [Render Dashboard](https://dashboard.render.com), click **New +** > **Blueprint**.
 3. Select your repository. Render will automatically configure the service using `render.yaml`.
@@ -312,6 +316,7 @@ Configure the following environment variables in your Render service settings:
 | `PUBLIC_APP_URL` | **Yes** | Deployed canonical HTTPS origin | `https://feedbackhub.onrender.com` |
 | `ALLOWED_ORIGINS` | Optional | Permitted CORS origins (matches public URL) | `https://feedbackhub.onrender.com` |
 | `ENABLE_DEMO_MODE` | **Yes** | Strictly disables 1-click demo role switcher | `false` |
+| `ENABLE_FALLBACK_DNS` | No | Dev-only fallback DNS flag; strictly prohibited & ignored in production | `false` |
 
 > [!WARNING]
 > * Never run `npm run seed` in production. Seeding is strictly blocked when `NODE_ENV=production`.
@@ -326,7 +331,7 @@ Configure the following environment variables in your Render service settings:
 
 ## 📌 Known Limitations & Troubleshooting
 
-1. **DNS SRV Resolution on Local Windows Networks**: Some Windows residential ISP routers block DNS SRV lookups for `mongodb+srv://` (emitting `querySrv ECONNREFUSED`). The application automatically applies Google/Cloudflare public fallback DNS (`8.8.8.8`, `1.1.1.1`), which resolves cleanly. On Render Linux containers, standard DNS is used natively.
+1. **DNS SRV Resolution on Local Windows Networks**: By default, the application preserves the operating system's default DNS resolver. If local residential ISP routers fail DNS SRV lookups for `mongodb+srv://` (emitting `querySrv ECONNREFUSED`) during development, set `ENABLE_FALLBACK_DNS=true` in `backend/.env` to opt into Google/Cloudflare public fallback DNS (`8.8.8.8`, `1.1.1.1`). In production (`NODE_ENV=production`), fallback DNS is strictly prohibited and standard system DNS is always enforced.
 2. **Disposable Test Database Requirement**: Live MongoDB Atlas tests (`npm run test:integration`, `npm run test:smoke`) require a disposable database configured via `TEST_MONGODB_URI` to prevent accidental data modification on production clusters.
 3. **Super-Admin CLI Provisioning**: In production, super-admin accounts cannot be seeded via `npm run seed`. Administrators must run `npm run bootstrap:superadmin`.
 

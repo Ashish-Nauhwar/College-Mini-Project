@@ -16,15 +16,17 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const dns = require('dns');
 
-// DNS server fallback for Windows environments with SRV lookup issues
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch (e) {
-  // Ignore in restricted environments
-}
-
-// Load environment configuration
+// Load environment configuration first
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+// DNS server fallback for development when explicitly opted in
+if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FALLBACK_DNS === 'true') {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  } catch (e) {
+    // Ignore in restricted environments
+  }
+}
 
 const { Business, User, Location, FeedbackForm, Feedback, AuditLog } = require('../src/models');
 const { hashPassword } = require('../src/utils/crypto');
