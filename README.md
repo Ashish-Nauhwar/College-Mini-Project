@@ -253,15 +253,15 @@ Reports environment file detection, port availability, active instance health de
 
 FeedbackHub provides two distinct tiers of automated verification:
 
-1. **`npm test` (Comprehensive Verification Suite)**:
-   * Executes all offline unit, safety, security, and Express API integration suites (11 suites) against isolated in-memory storage.
-   * If `TEST_MONGODB_URI` is configured in `backend/.env`, it also executes live MongoDB Atlas integration tests.
-   * If `TEST_MONGODB_URI` is not configured, live database suites report `[STATUS: SKIPPED]` with helpful instructions, allowing standard offline development checks to succeed cleanly without requiring cloud database credentials.
+1. **`npm test` (Master Verification Runner - 15 Suites)**:
+   * Executes 13 offline unit, safety, security, and Express API integration suites against isolated in-memory mock storage (no live database required).
+   * Executes 2 live MongoDB Atlas integration suites (16-Step API Integration & 13-Step Release Smoke Verification) when `TEST_MONGODB_URI` is configured in `backend/.env`.
+   * If `TEST_MONGODB_URI` is not configured, live database suites report `[STATUS: SKIPPED]` cleanly with setup instructions, allowing offline checks to pass without requiring cloud database credentials.
 
-2. **`npm run verify:release` (Strict Release Gating)**:
+2. **`npm run verify:release` (Strict Release Gating - 15 Suites)**:
    * Strict pre-deployment release gate for CI/CD pipelines and deployment signoff.
    * **Mandatory Requirement**: `TEST_MONGODB_URI` **must** be set, pointing to a verified disposable database (name containing `test`, `dev`, or `temp`).
-   * Unlike `npm test`, `verify:release` **strictly refuses to pass** if any live database test is skipped or fails. It terminates immediately with exit code 1 if `TEST_MONGODB_URI` is absent or points to a non-disposable database.
+   * Unlike `npm test`, `verify:release` **strictly refuses to pass** if any live database test is skipped or fails. It terminates immediately with exit code 1 if `TEST_MONGODB_URI` is absent, contains placeholders, or points to a non-disposable database. All 15 suites must pass with exit code 0.
 
 #### Run the Verification Runner
 ```bash

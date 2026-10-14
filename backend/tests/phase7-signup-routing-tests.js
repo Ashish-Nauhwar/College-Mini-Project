@@ -378,7 +378,8 @@ async function runPhase7Tests() {
         });
 
         assert.strictEqual(res.status, 200);
-        const forms = await res.json();
+        const formsJson = await res.json();
+        const forms = Array.isArray(formsJson) ? formsJson : (formsJson.forms || []);
         assert.ok(Array.isArray(forms));
         assert.ok(forms.length >= 1, 'New business should have an initial feedback form provisioned');
       });

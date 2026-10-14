@@ -204,6 +204,7 @@ async function runRealMongoIntegrationTest() {
     assert.strictEqual(createFormRes.status, 201, 'Form creation must return 201');
     const formJson = await createFormRes.json();
     const testFormId = formJson.form.id || formJson.form._id;
+    const actualFormSlug = formJson.form.slug;
     created.forms.push(testFormId);
     assert.strictEqual(formJson.form.status, 'draft', 'New form must unconditionally be in draft status');
     console.log('  ✓ Form created and verified in "draft" status');
@@ -225,7 +226,7 @@ async function runRealMongoIntegrationTest() {
 
     // Step 7: Draft form rejects public submissions
     console.log('[Step 7] Verifying draft form rejects public feedback submissions (HTTP 403)...');
-    const submitDraftRes = await fetch(`${BASE_URL}/api/feedback/submit/${formSlug}`, {
+    const submitDraftRes = await fetch(`${BASE_URL}/api/feedback/submit/${actualFormSlug}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rating: 5, answers: { q_rate: 5, q_nps: 10 } })
@@ -246,7 +247,7 @@ async function runRealMongoIntegrationTest() {
 
     // Step 9: Public submission with invalid academic department rejected
     console.log('[Step 9] Verifying public submission with unconfigured academic department is rejected...');
-    const invalidDeptRes = await fetch(`${BASE_URL}/api/feedback/submit/${formSlug}`, {
+    const invalidDeptRes = await fetch(`${BASE_URL}/api/feedback/submit/${actualFormSlug}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -265,7 +266,7 @@ async function runRealMongoIntegrationTest() {
 
     // Step 10: Valid public submission 1 (Complaint / Detractor)
     console.log('[Step 10] Submitting valid feedback #1 (Rating 2 / NPS 1 - Complaint Detractor)...');
-    const sub1Res = await fetch(`${BASE_URL}/api/feedback/submit/${formSlug}`, {
+    const sub1Res = await fetch(`${BASE_URL}/api/feedback/submit/${actualFormSlug}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -289,7 +290,7 @@ async function runRealMongoIntegrationTest() {
 
     // Step 11: Valid public submission 2 (Promoter)
     console.log('[Step 11] Submitting valid feedback #2 (Rating 5 / NPS 10 - Promoter)...');
-    const sub2Res = await fetch(`${BASE_URL}/api/feedback/submit/${formSlug}`, {
+    const sub2Res = await fetch(`${BASE_URL}/api/feedback/submit/${actualFormSlug}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -322,7 +323,8 @@ async function runRealMongoIntegrationTest() {
     assert.strictEqual(fetchedFbs.length, 2, 'Exactly 2 feedback records must be returned for this form');
     const complaintFb = fetchedFbs.find(f => f.rating === 2);
     assert.ok(complaintFb, 'Complaint feedback (rating 2) must be present');
-    assert.strictEqual(complaintFb.priority, 'urgent', 'Rating 2 feedback must have urgent priority');
+    assert.strictEqual(complaintFb.priority, 'critical', 'Rating 2 with detractor NPS 1 (NPS <= 3) must have critical priority');
+    assert.strictEqual(complaintFb.sentiment, 'negative', 'Detractor feedback must have negative sentiment');
     console.log('  ✓ Feedbacks retrieved and complaint status verified');
 
     // Step 13: Accurate average rating & separate NPS calculations
@@ -349,23 +351,35 @@ async function runRealMongoIntegrationTest() {
 
     // Step 15: Cross-tenant isolation verification
     console.log('[Step 15] Verifying cross-tenant isolation with a secondary tenant...');
-    const bizB = await Business.create({
-      name: `Competitor Business ${testTimestamp}`,
-      type: 'restaurant',
-      email: `competitor-${testTimestamp}@cafe.com`,
-      active: true
+    const regResB = await fetch(`${BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessName: `Competitor Business ${testTimestamp}`,
+        businessType: 'restaurant',
+        name: 'Owner B',
+        email: `owner-b-${testTimestamp}@cafe.com`,
+        password: 'ValidPassword@123',
+        isOnlineOnly: true
+      })
     });
-    created.businesses.push(bizB._id);
+    assert.strictEqual(regResB.status, 201, 'Secondary tenant registration must succeed with 201');
+    const regDataB = await regResB.json();
+    const tokenB = regDataB.token;
+    assert.ok(tokenB, 'Secondary tenant registration must return valid token');
 
-    const ownerB = await User.create({
-      name: 'Owner B',
-      email: `owner-b-${testTimestamp}@cafe.com`,
-      password: pwdHash,
-      role: 'owner',
-      businessId: bizB._id
-    });
-    created.users.push(ownerB._id);
-    const tokenB = generateToken(ownerB);
+    if (regDataB.business && (regDataB.business._id || regDataB.business.id)) {
+      created.businesses.push(regDataB.business._id || regDataB.business.id);
+    }
+    if (regDataB.user && (regDataB.user._id || regDataB.user.id)) {
+      created.users.push(regDataB.user._id || regDataB.user.id);
+    }
+    if (regDataB.firstLocation && (regDataB.firstLocation._id || regDataB.firstLocation.id)) {
+      created.locations.push(regDataB.firstLocation._id || regDataB.firstLocation.id);
+    }
+    if (regDataB.firstForm && (regDataB.firstForm._id || regDataB.firstForm.id)) {
+      created.forms.push(regDataB.firstForm._id || regDataB.firstForm.id);
+    }
 
     // Tenant B attempts to read Tenant A's form
     const crossTenantGet = await fetch(`${BASE_URL}/api/forms/${testFormId}`, {
@@ -393,37 +407,64 @@ async function runRealMongoIntegrationTest() {
   } finally {
     // Teardown: Clean up test documents by ID inside finally block
     console.log('[Teardown] Performing deterministic teardown of test records by ID...');
+    let cleanupFailed = false;
+    let cleanupError = null;
+
     try {
       if (created.feedbacks.length > 0) {
-        await Feedback.deleteMany({ _id: { $in: created.feedbacks } }).catch(() => {});
+        await Feedback.deleteMany({ _id: { $in: created.feedbacks } });
       }
       if (created.forms.length > 0) {
-        await FeedbackForm.deleteMany({ _id: { $in: created.forms } }).catch(() => {});
+        await FeedbackForm.deleteMany({ _id: { $in: created.forms } });
       }
       if (created.locations.length > 0) {
-        await Location.deleteMany({ _id: { $in: created.locations } }).catch(() => {});
+        await Location.deleteMany({ _id: { $in: created.locations } });
       }
       if (created.users.length > 0) {
-        await User.deleteMany({ _id: { $in: created.users } }).catch(() => {});
+        await User.deleteMany({ _id: { $in: created.users } });
       }
       if (created.businesses.length > 0) {
-        await Business.deleteMany({ _id: { $in: created.businesses } }).catch(() => {});
-        await AuditLog.deleteMany({ businessId: { $in: created.businesses } }).catch(() => {});
+        await Business.deleteMany({ _id: { $in: created.businesses } });
+        await AuditLog.deleteMany({ businessId: { $in: created.businesses } });
       }
       if (created.auditLogs.length > 0) {
-        await AuditLog.deleteMany({ _id: { $in: created.auditLogs } }).catch(() => {});
+        await AuditLog.deleteMany({ _id: { $in: created.auditLogs } });
       }
       console.log('  ✓ All test documents cleanly deleted by ID without touching unrelated data');
     } catch (e) {
-      console.error('  Warning during teardown:', e.message);
+      cleanupFailed = true;
+      cleanupError = e;
+      console.error('[Teardown Failure]: Error during document cleanup:', e.message);
     }
 
-    // Teardown server and close connection
-    if (server) {
-      server.close();
+    // Await Express server closure before closing MongoDB connection
+    if (server && server.listening) {
+      try {
+        await new Promise((resolve, reject) => {
+          server.close((err) => (err ? reject(err) : resolve()));
+        });
+        console.log('  ✓ Express test server shut down cleanly');
+      } catch (err) {
+        cleanupFailed = true;
+        if (!cleanupError) cleanupError = err;
+        console.error('[Teardown Failure]: Error closing Express server:', err.message);
+      }
     }
-    if (mongoose.connection.readyState !== 0) {
-      await mongoose.connection.close();
+
+    // Close MongoDB connection after server is closed
+    if (mongoose.connection && mongoose.connection.readyState !== 0) {
+      try {
+        await mongoose.connection.close();
+        console.log('  ✓ MongoDB Atlas connection closed cleanly');
+      } catch (err) {
+        cleanupFailed = true;
+        if (!cleanupError) cleanupError = err;
+        console.error('[Teardown Failure]: Error closing MongoDB connection:', err.message);
+      }
+    }
+
+    if (cleanupFailed && cleanupError) {
+      throw new Error(`Integration test cleanup failed: ${cleanupError.message}`);
     }
   }
 }
@@ -433,8 +474,9 @@ if (require.main === module) {
     if (result && result.skipped) {
       process.exit(0);
     }
+    process.exit(0);
   }).catch(err => {
-    console.error('Real Mongo Integration Test failed:', err);
+    console.error('\n[Real Mongo Integration Test Failed]:', err);
     process.exit(1);
   });
 }
