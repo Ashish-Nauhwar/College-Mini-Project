@@ -412,37 +412,54 @@
 
   function evaluateAllConditions() {
     if (!currentForm || !currentForm.questions) return;
+    const questionsMap = new Map((currentForm.questions || []).map(q => [q.id, q]));
+
+    function checkVisibility(q, visited = new Set()) {
+      if (!q || typeof q !== 'object') return false;
+      if (!q.conditional || !q.conditional.dependsOn) return true;
+      if (q.id && visited.has(q.id)) return false;
+      if (q.id) visited.add(q.id);
+
+      const parentId = q.conditional.dependsOn;
+      const parentQ = questionsMap.get(parentId);
+      if (parentQ && !checkVisibility(parentQ, visited)) {
+        return false;
+      }
+
+      const parentVal = dynamicAnswers[parentId];
+      if (parentVal === undefined || parentVal === null || parentVal === '') return false;
+
+      const target = q.conditional.value;
+      const op = q.conditional.operator || 'equals';
+
+      if (op === 'equals') return String(parentVal).trim() === String(target).trim();
+      if (op === 'not_equals') return String(parentVal).trim() !== String(target).trim();
+      if (op === 'in' && Array.isArray(target)) return target.some(t => String(t).trim() === String(parentVal).trim());
+      if (op === 'greater_than') {
+        const p = Number(parentVal);
+        const t = Number(target);
+        return Number.isFinite(p) && Number.isFinite(t) && p > t;
+      }
+      if (op === 'less_than') {
+        const p = Number(parentVal);
+        const t = Number(target);
+        return Number.isFinite(p) && Number.isFinite(t) && p < t;
+      }
+      if (op === 'contains') {
+        if (Array.isArray(parentVal)) {
+          return parentVal.some(t => String(t).toLowerCase().includes(String(target).toLowerCase()));
+        }
+        return String(parentVal).toLowerCase().includes(String(target).toLowerCase());
+      }
+      return false;
+    }
 
     currentForm.questions.forEach(q => {
       const wrap = document.getElementById(`qwrap_${q.id}`);
       if (!wrap) return;
 
-      if (!q.conditional || !q.conditional.dependsOn) {
-        wrap.classList.remove('hidden');
-        return;
-      }
-
-      const parentVal = dynamicAnswers[q.conditional.dependsOn];
-      const target = q.conditional.value;
-      const op = q.conditional.operator || 'equals';
-      let satisfied = false;
-
-      if (parentVal !== undefined && parentVal !== null) {
-        if (op === 'equals') satisfied = String(parentVal).trim() === String(target).trim();
-        else if (op === 'not_equals') satisfied = String(parentVal).trim() !== String(target).trim();
-        else if (op === 'in' && Array.isArray(target)) satisfied = target.some(t => String(t).trim() === String(parentVal).trim());
-        else if (op === 'greater_than') satisfied = Number(parentVal) > Number(target);
-        else if (op === 'less_than') satisfied = Number(parentVal) < Number(target);
-        else if (op === 'contains') {
-          if (Array.isArray(parentVal)) {
-            satisfied = parentVal.some(t => String(t).toLowerCase().includes(String(target).toLowerCase()));
-          } else {
-            satisfied = String(parentVal).toLowerCase().includes(String(target).toLowerCase());
-          }
-        }
-      }
-
-      if (satisfied) {
+      const isVisible = checkVisibility(q);
+      if (isVisible) {
         wrap.classList.remove('hidden');
       } else {
         wrap.classList.add('hidden');

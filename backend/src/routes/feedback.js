@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { determineSentimentAndPriority } = require('../utils/analyticsHelper');
 
 // Helper to strictly validate calendar dates (rejects Feb 31, Apr 31, invalid leaps, etc.)
 function isValidCalendarDate(str) {
@@ -29,23 +30,42 @@ function isValidCalendarDate(str) {
   return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
 }
 
-// Helper to evaluate conditional visibility on the server
-function isQuestionVisible(q, answers, questionsMap) {
+// Helper to evaluate conditional visibility on the server recursively
+function isQuestionVisible(q, answers, questionsMap, visited = new Set()) {
+  if (!q || typeof q !== 'object') return false;
   if (!q.conditional || !q.conditional.dependsOn) return true;
 
-  // Check parent visibility if graph map provided
-  if (questionsMap && questionsMap.has(q.conditional.dependsOn)) {
-    const parentQ = questionsMap.get(q.conditional.dependsOn);
-    if (!isQuestionVisible(parentQ, answers, questionsMap)) {
+  // Cycle detection: fail closed if a dependency cycle is encountered
+  if (q.id && visited.has(q.id)) {
+    return false;
+  }
+  if (q.id) {
+    visited.add(q.id);
+  }
+
+  const parentId = q.conditional.dependsOn;
+
+  // Evaluate conditional visibility recursively through ancestor questions
+  if (questionsMap) {
+    if (!questionsMap.has(parentId)) {
+      // Parent question does not exist in form definition -> fail closed
+      return false;
+    }
+    const parentQ = questionsMap.get(parentId);
+    if (!isQuestionVisible(parentQ, answers, questionsMap, visited)) {
       return false;
     }
   }
 
-  const parentValue = answers[q.conditional.dependsOn];
+  if (!answers || typeof answers !== 'object') {
+    return false;
+  }
+
+  const parentValue = answers[parentId];
   const target = q.conditional.value;
   const op = q.conditional.operator || 'equals';
 
-  if (parentValue === undefined || parentValue === null) return false;
+  if (parentValue === undefined || parentValue === null || parentValue === '') return false;
 
   switch (op) {
     case 'equals':
@@ -73,7 +93,8 @@ function isQuestionVisible(q, answers, questionsMap) {
       }
       return String(parentValue).toLowerCase().includes(String(target).toLowerCase());
     default:
-      return true;
+      // Fail closed for invalid or unsupported operators
+      return false;
   }
 }
 
@@ -113,12 +134,14 @@ async function handleSubmit(req, res) {
     }
 
     // SERVER-SIDE VALIDATION: Validate every configured question
+    const questionsMap = new Map((form.questions || []).map(q => [q.id, q]));
     const sanitizedAnswers = {};
 
     for (const q of form.questions || []) {
-      const isVisible = isQuestionVisible(q, answers);
+      const isVisible = isQuestionVisible(q, answers, questionsMap);
       if (!isVisible) {
-        // If question condition is not met, do not enforce or store invalid dependencies
+        // If question condition is not met or ancestor is hidden:
+        // Do not validate, trust, or store any client-submitted answer
         continue;
       }
 
@@ -426,56 +449,62 @@ async function handleSubmit(req, res) {
     // When showOverallRating is false, overallRating remains null.
     // Individual rating question answers are preserved in sanitizedAnswers/answers, but NOT copied into overallRating.
 
-    // Extract NPS responses (0 to 10 scale)
+    // Extract NPS responses (0 to 10 scale) - Authoritative & Consistent (Priority 2)
+    const configuredNpsQuestions = (form.questions || []).filter(q => q.type === 'nps');
     const npsAnswersMap = new Map();
     let primaryNps = null;
-    if (nps !== undefined && nps !== null && nps !== '') {
-      const parsedNps = Number(nps);
-      if (!Number.isFinite(parsedNps) || !Number.isInteger(parsedNps) || parsedNps < 0 || parsedNps > 10) {
-        return res.status(400).json({ error: 'NPS score must be an integer between 0 and 10' });
+
+    if (configuredNpsQuestions.length === 0) {
+      // If form has NO NPS questions configured, reject top-level NPS input to prevent skewing analytics
+      if (nps !== undefined && nps !== null && nps !== '') {
+        return res.status(400).json({
+          error: 'NPS score is not accepted because this form does not have an NPS question configured'
+        });
       }
-      primaryNps = parsedNps;
-    }
-    for (const [key, val] of Object.entries(sanitizedAnswers)) {
-      const matchingQ = form.questions.find(q => q.id === key);
-      if (matchingQ && matchingQ.type === 'nps' && typeof val === 'number') {
-        npsAnswersMap.set(key, val);
-        if (primaryNps === null) {
-          primaryNps = val;
+    } else {
+      const primaryQ = configuredNpsQuestions[0];
+      const answeredVal = (sanitizedAnswers[primaryQ.id] !== undefined && typeof sanitizedAnswers[primaryQ.id] === 'number')
+        ? sanitizedAnswers[primaryQ.id]
+        : null;
+
+      if (nps !== undefined && nps !== null && nps !== '') {
+        const parsedNps = Number(nps);
+        if (!Number.isFinite(parsedNps) || !Number.isInteger(parsedNps) || parsedNps < 0 || parsedNps > 10) {
+          return res.status(400).json({ error: 'NPS score must be an integer between 0 and 10' });
+        }
+
+        if (answeredVal !== null) {
+          if (parsedNps !== answeredVal) {
+            return res.status(400).json({
+              error: `Submitted top-level NPS score (${parsedNps}) does not match the answer provided for NPS question "${primaryQ.text}" (${answeredVal})`
+            });
+          }
+          primaryNps = answeredVal;
+        } else {
+          // Top-level provided but answers[primaryQ.id] wasn't supplied directly:
+          const isPrimaryVisible = isQuestionVisible(primaryQ, answers, questionsMap);
+          if (!isPrimaryVisible) {
+            return res.status(400).json({
+              error: 'NPS score is not accepted because the NPS question is not active or visible for this submission'
+            });
+          }
+          sanitizedAnswers[primaryQ.id] = parsedNps;
+          primaryNps = parsedNps;
+        }
+      } else {
+        primaryNps = answeredVal;
+      }
+
+      // Collect all configured NPS question answers into npsAnswersMap
+      for (const q of configuredNpsQuestions) {
+        if (sanitizedAnswers[q.id] !== undefined && typeof sanitizedAnswers[q.id] === 'number') {
+          npsAnswersMap.set(q.id, sanitizedAnswers[q.id]);
         }
       }
     }
 
-    // Explicit sentiment & priority routing
-    let sentiment = 'neutral';
-    let priority = 'low';
-
-    if (overallRating !== null) {
-      if (overallRating >= 4) {
-        sentiment = 'positive';
-        priority = 'low';
-      } else if (overallRating === 3) {
-        sentiment = 'neutral';
-        priority = 'medium';
-      } else {
-        sentiment = 'negative';
-        priority = overallRating === 1 ? 'critical' : 'urgent';
-      }
-    } else if (primaryNps !== null) {
-      if (primaryNps >= 9) {
-        sentiment = 'positive';
-        priority = 'low';
-      } else if (primaryNps >= 7) {
-        sentiment = 'neutral';
-        priority = 'low';
-      } else {
-        sentiment = 'negative';
-        priority = primaryNps <= 3 ? 'critical' : 'urgent';
-      }
-    } else {
-      sentiment = 'neutral';
-      priority = 'low';
-    }
+    // Explicit sentiment & priority routing (Priority 3)
+    const { sentiment, priority } = determineSentimentAndPriority(overallRating, primaryNps, req.body.sentiment);
 
     // Save feedback to database
     const newFeedback = await db.createFeedback({
@@ -503,7 +532,7 @@ async function handleSubmit(req, res) {
 
     return res.status(201).json({
       success: true,
-      message: (overallRating !== null && overallRating >= 4)
+      message: (sentiment === 'positive')
         ? 'Thank you for your fantastic feedback! We are thrilled to hear about your experience.'
         : 'Thank you for your feedback. We take all feedback seriously, and our team will review your comments promptly.',
       feedbackId: newFeedback._id ? newFeedback._id.toString() : newFeedback.id,

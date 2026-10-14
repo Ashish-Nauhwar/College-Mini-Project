@@ -1,6 +1,6 @@
 # FeedbackHub - Mobile-First Customer & Academic Feedback Platform
 
-FeedbackHub is a production-ready, mobile-first customer and institutional feedback management platform. It enables businesses, colleges, and clinics to capture instant feedback via QR codes, analyze sentiment and NPS in real time, build dynamic multi-question surveys with acyclic conditional dependency logic, and manage complaints through dedicated workflows.
+FeedbackHub is a mobile-first customer and institutional feedback management platform (Release Candidate; ready for production deployment upon completion of live release verification). It enables businesses, colleges, and clinics to capture instant feedback via QR codes, analyze sentiment and NPS in real time, build dynamic multi-question surveys with acyclic conditional dependency logic, and manage complaints through dedicated workflows.
 
 ---
 
@@ -249,34 +249,26 @@ npm run diagnose
 ```
 Reports environment file detection, port availability, active instance health detection, masked MongoDB Atlas connection test, and static asset integrity.
 
-### Run All Automated Suites
+### Automated Testing & Release Verification Architecture
+
+FeedbackHub provides two distinct tiers of automated verification:
+
+1. **`npm test` (Comprehensive Verification Suite)**:
+   * Executes all offline unit, safety, security, and Express API integration suites (11 suites) against isolated in-memory storage.
+   * If `TEST_MONGODB_URI` is configured in `backend/.env`, it also executes live MongoDB Atlas integration tests.
+   * If `TEST_MONGODB_URI` is not configured, live database suites report `[STATUS: SKIPPED]` with helpful instructions, allowing standard offline development checks to succeed cleanly without requiring cloud database credentials.
+
+2. **`npm run verify:release` (Strict Release Gating)**:
+   * Strict pre-deployment release gate for CI/CD pipelines and deployment signoff.
+   * **Mandatory Requirement**: `TEST_MONGODB_URI` **must** be set, pointing to a verified disposable database (name containing `test`, `dev`, or `temp`).
+   * Unlike `npm test`, `verify:release` **strictly refuses to pass** if any live database test is skipped or fails. It terminates immediately with exit code 1 if `TEST_MONGODB_URI` is absent or points to a non-disposable database.
+
+#### Run the Verification Runner
 ```bash
 npm test
 ```
-Executes all automated suites with comprehensive summary accounting:
-```
-=============================================================================
-              FEEDBACKHUB AUTOMATED VERIFICATION SUMMARY                     
-=============================================================================
- 1. Security & Auth Isolation [Isolated Mock DB]                            : PASS ✓
- 2. NPS & Rating Formula Correctness [Isolated Mock DB]                     : PASS ✓
- 3. Injection Hardening & Validation [Isolated Mock DB]                     : PASS ✓
- 4. College Academic 12-Step E2E Flow [Isolated Mock DB]                    : PASS ✓
- 5. Phase 4 Unit Tests (Graph/Analytics/JWT) [Pure Unit Tests]              : PASS ✓
- 6. Phase 4 Data Safety & DB Protection [Safety Unit Tests]                 : PASS ✓
- 7. Phase 5 RBAC, Lifecycle & Safety [Isolated Mock DB]                     : PASS ✓
- 8. Phase 7 Signup & Routing Resilience [App & DB Check]                    : PASS ✓
- 9. Phase 8 Production Safety & E2E Verification [Express App & Safety Check]: PASS ✓
-10. Phase 10 Release Readiness & Verification [Express App & Onboarding Check]: PASS ✓
-11. Real MongoDB Atlas Integration [Live Database]                          : SKIPPED (requires TEST_MONGODB_URI configured)
-12. Final 13-Step Release Smoke Verification [Live Database]                : SKIPPED (requires TEST_MONGODB_URI configured)
-=============================================================================
-Verification Tally: 10 Passed | 2 Skipped (Live DB optional) | 0 Failed
-=============================================================================
-```
 
-### Strict Release Gating Command
-For pre-deployment release verification where skipping live database tests is prohibited:
+#### Run Strict Release Gating
 ```bash
 npm run verify:release
 ```
@@ -290,6 +282,9 @@ npm test
 
 # Strict Release Gating (Fails if TEST_MONGODB_URI is missing or live tests are skipped)
 npm run verify:release
+
+# Phase 13 Logic Verification (Conditionals / NPS Authority / Complaints)
+npm run test:phase13
 
 # Phase 10 Release Readiness & Usability
 npm run test:phase10

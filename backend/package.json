@@ -19,6 +19,7 @@
     "test:phase7": "node tests/phase7-signup-routing-tests.js",
     "test:phase8": "node tests/phase8-production-safety-tests.js",
     "test:phase10": "node tests/phase10-release-verification-tests.js",
+    "test:phase13": "node tests/phase13-logic-and-release-tests.js",
     "test:integration": "node tests/real-mongo-integration-test.js",
     "test:smoke": "node tests/smoke-test-final.js",
     "verify:release": "node tests/verify-release.js",
