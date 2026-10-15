@@ -29,5 +29,6 @@ edge-profile*/
 tests/profile*/
 tmp/
 temp/
+backend/data/
 
 

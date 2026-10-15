@@ -305,11 +305,118 @@ const app = (function () {
     if (publicLink) publicLink.style.display = 'inline-flex';
   }
 
+  // --- Profile Modal & Account Management ---
+  function openProfileModal() {
+    const modal = document.getElementById('userProfileModal');
+    const body = document.getElementById('userProfileModalBody');
+    const badge = document.getElementById('userProfileBadge');
+    if (!modal) return;
+
+    if (badge) {
+      badge.setAttribute('aria-expanded', 'true');
+    }
+
+    if (body) {
+      if (!currentUser) {
+        body.innerHTML = `
+          <div style="text-align: center; padding: 20px 10px;">
+            <div style="font-size: 2.5rem; margin-bottom: 8px;">👤</div>
+            <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; color: var(--neutral-900);">No Active Session</div>
+            <div class="text-muted text-sm" style="margin-bottom: 16px;">Please sign in to access your profile, workspace settings, and feedback forms.</div>
+            <a href="#/login" class="btn btn-primary btn-sm" onclick="app.closeProfileModal()">Go to Sign In</a>
+          </div>
+        `;
+      } else {
+        const roleLabels = {
+          owner: 'Business Owner',
+          admin: 'Administrator',
+          superadmin: 'Super Admin',
+          manager: 'Location Manager',
+          staff: 'Staff Member',
+          college_admin: 'College Administrator',
+          college: 'College Administrator'
+        };
+        const rawRole = (currentUser.role || '').toLowerCase();
+        const displayRole = roleLabels[rawRole] || (rawRole ? rawRole.charAt(0).toUpperCase() + rawRole.slice(1) : 'Member');
+        const bizDisplayName = currentBusiness ? currentBusiness.name : (rawRole === 'superadmin' ? 'Super Admin Mode' : 'My Business');
+
+        body.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+            <div style="width: 52px; height: 52px; border-radius: 50%; background-color: var(--primary-light); color: var(--primary-text); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0;">
+              ${escapeHtml(currentUser.avatar || '👤')}
+            </div>
+            <div style="overflow: hidden; flex: 1;">
+              <div id="profileModalUserName" style="font-weight: 700; font-size: 1.1rem; color: var(--neutral-900); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                ${escapeHtml(currentUser.name || 'User')}
+              </div>
+              <div id="profileModalUserEmail" style="font-size: 0.85rem; color: var(--neutral-500); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                ${escapeHtml(currentUser.email || 'No email')}
+              </div>
+              <div style="margin-top: 4px;">
+                <span id="profileModalUserRole" class="badge badge-primary" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                  ${escapeHtml(displayRole)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; background-color: var(--neutral-50); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="text-muted" style="font-size: 0.82rem;">Workspace</span>
+              <span style="font-weight: 600; color: var(--neutral-800); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 220px;">
+                ${escapeHtml(bizDisplayName)}
+              </span>
+            </div>
+            ${currentBusiness && currentBusiness.type ? `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="text-muted" style="font-size: 0.82rem;">Organization Type</span>
+              <span style="font-weight: 600; color: var(--neutral-800); text-transform: capitalize;">
+                ${escapeHtml(currentBusiness.type)}
+              </span>
+            </div>` : ''}
+          </div>
+
+          <div class="demo-switch-container" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+            <div style="font-size: 0.75rem; font-weight: 600; color: var(--neutral-500); margin-bottom: 8px;">SWITCH DEMO USER</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('owner'); app.closeProfileModal();" style="justify-content: flex-start;">👩‍💼 Sarah (Owner)</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('manager'); app.closeProfileModal();" style="justify-content: flex-start;">👨‍💼 Marcus (Manager)</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.switchDemo('college'); app.closeProfileModal();" style="justify-content: flex-start;">🎓 Dr. Sharma (College)</button>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeProfileModal() {
+    const modal = document.getElementById('userProfileModal');
+    const badge = document.getElementById('userProfileBadge');
+    if (badge) {
+      badge.setAttribute('aria-expanded', 'false');
+    }
+    if (modal) {
+      modal.classList.remove('active');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   function logout(showNotification = true) {
+    closeProfileModal();
     token = null;
     currentUser = null;
     currentBusiness = null;
     localStorage.removeItem('fh_token');
+    const userAvatar = document.getElementById('userAvatar');
+    const userName = document.getElementById('userName');
+    if (userAvatar) userAvatar.textContent = '👤';
+    if (userName) userName.textContent = '';
+    const publicLink = document.getElementById('headerPublicFormLink');
+    if (publicLink) publicLink.style.display = 'none';
+
     if (showNotification) {
       showToast('Logged out successfully', 'info');
     }
@@ -2038,6 +2145,29 @@ const app = (function () {
       });
     });
 
+    // Modal backdrop clicks close active modal
+    document.querySelectorAll('.modal-backdrop').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.classList.remove('active');
+          modal.setAttribute('aria-hidden', 'true');
+          const badge = document.getElementById('userProfileBadge');
+          if (badge) badge.setAttribute('aria-expanded', 'false');
+        }
+      });
+    });
+
+    // Close open menus/modals with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        closeProfileModal();
+        closeFeedbackModal();
+        closeAddLocationModal();
+        closePreviewModal();
+        closeMobileDrawer();
+      }
+    });
+
     // Hash change router
     window.addEventListener('hashchange', handleRoute);
 
@@ -2178,6 +2308,8 @@ const app = (function () {
     navigate,
     switchDemo,
     logout,
+    openProfileModal,
+    closeProfileModal,
     openMobileDrawer,
     closeMobileDrawer,
     refreshDashboard,
@@ -2217,3 +2349,8 @@ const app = (function () {
     toggleBusinessStatus
   };
 })();
+
+// Explicitly bind to window for inline event handlers and external controllers
+if (typeof window !== 'undefined') {
+  window.app = app;
+}

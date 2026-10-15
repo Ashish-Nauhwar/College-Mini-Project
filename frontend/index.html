@@ -117,7 +117,7 @@
           </a>
 
           <!-- User Profile Chip -->
-          <div class="user-profile-badge" id="userProfileBadge" onclick="app.openProfileModal()" title="View profile & demo accounts">
+          <div class="user-profile-badge" id="userProfileBadge" onclick="app.openProfileModal()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();app.openProfileModal();}" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" title="View profile & demo accounts">
             <span class="user-avatar" id="userAvatar">👩‍💼</span>
             <span id="userName" style="font-size: 0.85rem; font-weight: 600; display: none; @media(min-width: 640px){display: inline;}">Sarah</span>
           </div>
@@ -1030,6 +1030,27 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="app.closePreviewModal()">Close Preview</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL: USER PROFILE & ACCOUNT
+       ========================================== -->
+  <div class="modal-backdrop" id="userProfileModal" aria-hidden="true" role="dialog" aria-labelledby="modalProfileTitle">
+    <div class="modal-container" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="h3" id="modalProfileTitle" style="font-size: 1.15rem; margin: 0;">User Profile</h3>
+        <button type="button" class="drawer-close-btn" onclick="app.closeProfileModal()" aria-label="Close profile modal">✕</button>
+      </div>
+
+      <div class="modal-body" id="userProfileModalBody">
+        <!-- Injected by app.js -->
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <button type="button" class="btn btn-secondary" onclick="app.closeProfileModal()">Close</button>
+        <button type="button" class="btn btn-danger" onclick="app.logout()" style="background-color: var(--danger, #ef4444); color: #ffffff; border: none;">Log Out</button>
       </div>
     </div>
   </div>

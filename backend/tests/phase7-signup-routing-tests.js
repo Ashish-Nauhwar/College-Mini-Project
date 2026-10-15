@@ -183,6 +183,21 @@ async function runPhase7Tests() {
     assert.ok(indexHtml.includes('demo-switch-container'));
   });
 
+  await it('Profile badge and modal elements exist and app exposes openProfileModal, closeProfileModal and logout', () => {
+    const indexPath = path.join(__dirname, '..', '..', 'frontend', 'index.html');
+    const appPath = path.join(__dirname, '..', '..', 'frontend', 'js', 'app.js');
+    const indexHtml = fs.readFileSync(indexPath, 'utf8');
+    const appJs = fs.readFileSync(appPath, 'utf8');
+
+    assert.ok(indexHtml.includes('id="userProfileBadge"'), 'userProfileBadge must exist in index.html');
+    assert.ok(indexHtml.includes('id="userProfileModal"'), 'userProfileModal must exist in index.html');
+    assert.ok(indexHtml.includes('app.openProfileModal()'), 'userProfileBadge must call app.openProfileModal()');
+    assert.ok(appJs.includes('openProfileModal,'), 'app.js must export openProfileModal');
+    assert.ok(appJs.includes('closeProfileModal,'), 'app.js must export closeProfileModal');
+    assert.ok(appJs.includes('logout,'), 'app.js must export logout');
+    assert.ok(appJs.includes('window.app = app;'), 'app.js must bind to window.app');
+  });
+
   // SECTION 4: Validation & Disconnected Honesty
   console.log('\n--- 4. API Request Validation & Error Honesty ---');
   await it('POST /api/auth/register validates required fields and rejects empty payload with HTTP 400', async () => {

@@ -23,6 +23,7 @@
     "test:phase14": "node backend/tests/phase14-regression-and-workflow-tests.js",
     "test:phase15": "node backend/tests/phase15-sentiment-security-and-release-tests.js",
     "test:qr": "node backend/tests/qr-standards-tests.js",
+    "test:profile": "node backend/tests/profile-modal-browser-test.js",
     "test:integration": "node backend/tests/real-mongo-integration-test.js",
     "test:smoke": "node backend/tests/smoke-test-final.js",
     "verify:release": "node backend/tests/verify-release.js",
