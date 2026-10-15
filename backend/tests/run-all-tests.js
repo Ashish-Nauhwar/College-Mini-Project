@@ -59,6 +59,7 @@ async function main() {
     { name: 'Phase 15 Secure Sentiment & Release Verification [Sentiment Security & Analytics]', file: 'phase15-sentiment-security-and-release-tests.js' },
     { name: 'QR Standards & Decoding Verification [Maintained Library & Gating]', file: 'qr-standards-tests.js' },
     { name: 'Profile Modal & Logout Verification [Browser & State]', file: 'profile-modal-browser-test.js' },
+    { name: 'Form Preview, Slug Authority & Status [In-App Preview & Status]', file: 'form-preview-and-slug-tests.js' },
     { name: 'Real MongoDB Atlas Integration [Live Database]', file: 'real-mongo-integration-test.js' },
     { name: 'Final 13-Step Release Smoke Verification [Live Database]', file: 'smoke-test-final.js' }
   ];

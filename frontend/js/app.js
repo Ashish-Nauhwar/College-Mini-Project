@@ -280,6 +280,129 @@ const app = (function () {
     }
   }
 
+  // --- Public Form URL & Link Management ---
+  function getPublicFormUrl(formOrSlug) {
+    if (!formOrSlug) return null;
+
+    let targetForm = null;
+    if (typeof formOrSlug === 'string') {
+      const cleanSlug = formOrSlug.trim().toLowerCase();
+      // Explicitly reject MongoDB ObjectIds (24 hex characters)
+      if (/^[0-9a-fA-F]{24}$/.test(cleanSlug)) {
+        console.warn(`[getPublicFormUrl] Rejected MongoDB ID "${cleanSlug}" as public URL slug.`);
+        return null;
+      }
+      targetForm = (forms || []).find(f => f.slug && f.slug.toLowerCase() === cleanSlug) ||
+                   (currentBuilderForm && currentBuilderForm.slug && currentBuilderForm.slug.toLowerCase() === cleanSlug ? currentBuilderForm : null);
+    } else if (typeof formOrSlug === 'object') {
+      targetForm = formOrSlug;
+    }
+
+    if (!targetForm) return null;
+
+    // Verify target form is present in the authenticated forms list or is the active builder form
+    const isKnown = (forms || []).some(f => (f.id && targetForm.id && f.id === targetForm.id) || (f.slug && targetForm.slug && f.slug.toLowerCase() === targetForm.slug.toLowerCase())) ||
+                    (currentBuilderForm && ((currentBuilderForm.id && targetForm.id && currentBuilderForm.id === targetForm.id) || (currentBuilderForm.slug && targetForm.slug && currentBuilderForm.slug.toLowerCase() === targetForm.slug.toLowerCase())));
+
+    if (!isKnown) {
+      console.warn('[getPublicFormUrl] Form does not exist in authenticated forms list');
+      return null;
+    }
+
+    if (!targetForm.slug || typeof targetForm.slug !== 'string') {
+      console.warn('[getPublicFormUrl] Form has no valid slug');
+      return null;
+    }
+
+    const safeSlug = targetForm.slug.trim().toLowerCase();
+    if (/^[0-9a-fA-F]{24}$/.test(safeSlug)) {
+      console.warn(`[getPublicFormUrl] Form slug cannot be a MongoDB ObjectId: "${safeSlug}"`);
+      return null;
+    }
+
+    const isPublished = targetForm.status === 'published';
+    const formUrl = isPublished ? `${window.location.origin}/feedback/${encodeURIComponent(safeSlug)}` : null;
+
+    return {
+      url: formUrl,
+      slug: safeSlug,
+      status: targetForm.status || 'draft',
+      isPublished,
+      form: targetForm,
+      error: !isPublished ? `Form "${targetForm.title}" is currently ${targetForm.status}. Only published forms have an active public URL.` : null
+    };
+  }
+
+  function syncHeaderPublicFormLink(preferredForm) {
+    const publicLink = document.getElementById('headerPublicFormLink');
+    if (!publicLink) return;
+
+    if (!currentUser) {
+      publicLink.style.display = 'none';
+      return;
+    }
+
+    let target = preferredForm || null;
+    if (!target) {
+      if (currentBuilderForm && window.location.hash.includes('builder')) {
+        target = currentBuilderForm;
+      } else {
+        target = (forms || []).find(f => f.status === 'published') || (forms && forms[0]) || currentBuilderForm;
+      }
+    }
+
+    if (!target) {
+      publicLink.style.display = 'none';
+      return;
+    }
+
+    const urlInfo = getPublicFormUrl(target);
+    publicLink.style.display = 'inline-flex';
+
+    if (urlInfo && urlInfo.isPublished && urlInfo.url) {
+      publicLink.href = urlInfo.url;
+      publicLink.target = '_blank';
+      publicLink.onclick = null;
+      publicLink.classList.remove('disabled');
+      publicLink.title = `Open live public form: ${target.title} (${urlInfo.slug})`;
+    } else {
+      publicLink.href = '#';
+      publicLink.target = '';
+      const st = target.status || 'draft';
+      publicLink.title = `Form "${target.title}" is currently ${st}. Click to preview in-app.`;
+      publicLink.onclick = (e) => {
+        e.preventDefault();
+        showToast(`Form "${target.title}" is currently in ${st.toUpperCase()} status. Opening in-app preview...`, 'info');
+        previewCurrentForm();
+      };
+    }
+  }
+
+  function updateBuilderOpenBtn(form) {
+    const btn = document.getElementById('builderOpenPublicBtn');
+    if (!btn) return;
+    if (!form) {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.style.display = 'inline-flex';
+    const urlInfo = getPublicFormUrl(form);
+    if (urlInfo && urlInfo.isPublished && urlInfo.url) {
+      btn.href = urlInfo.url;
+      btn.target = '_blank';
+      btn.onclick = null;
+      btn.title = `Open live public form: ${form.title}`;
+    } else {
+      btn.href = '#';
+      btn.target = '';
+      btn.title = `Form "${form.title}" is currently ${form.status}. Publish in Form Builder to open live form.`;
+      btn.onclick = (e) => {
+        e.preventDefault();
+        showToast(`Form "${form.title}" is currently in ${(form.status || 'draft').toUpperCase()} status. Publish it in Form Builder to make it live.`, 'warning');
+      };
+    }
+  }
+
   function updateUserUI() {
     if (!currentUser) return;
 
@@ -301,8 +424,7 @@ const app = (function () {
     if (mobileAdminItem) mobileAdminItem.classList.toggle('hidden', !isSuperAdmin);
     if (desktopAdminItem) desktopAdminItem.classList.toggle('hidden', !isSuperAdmin);
 
-    const publicLink = document.getElementById('headerPublicFormLink');
-    if (publicLink) publicLink.style.display = 'inline-flex';
+    syncHeaderPublicFormLink();
   }
 
   // --- Profile Modal & Account Management ---
@@ -433,6 +555,7 @@ const app = (function () {
       locations = locRes.locations || [];
       forms = formsRes.forms || [];
       populateLocationDropdowns();
+      syncHeaderPublicFormLink();
     } catch (err) {
       console.error('Error fetching common data:', err);
     }
@@ -991,6 +1114,8 @@ const app = (function () {
     try {
       const res = await api(`/api/forms/${formId}`);
       currentBuilderForm = res.form;
+      syncHeaderPublicFormLink(currentBuilderForm);
+      updateBuilderOpenBtn(currentBuilderForm);
 
       document.getElementById('builderTitle').value = currentBuilderForm.title || '';
       document.getElementById('builderDesc').value = currentBuilderForm.description || '';
@@ -1415,6 +1540,8 @@ const app = (function () {
         currentBuilderForm = transitionRes.form;
       }
 
+      syncHeaderPublicFormLink(currentBuilderForm);
+      updateBuilderOpenBtn(currentBuilderForm);
       showToast('Form configuration saved successfully!', 'success');
       fetchCommonData();
     } catch (err) {
@@ -1497,19 +1624,108 @@ const app = (function () {
   }
 
   function previewCurrentForm() {
-    if (!currentBuilderForm) return;
+    if (!currentBuilderForm) {
+      if (forms && forms.length > 0) {
+        currentBuilderForm = forms[0];
+      } else {
+        showToast('Please select or create a form first', 'warning');
+        return;
+      }
+    }
     const modal = document.getElementById('previewModal');
     const body = document.getElementById('previewModalBody');
+    if (!modal || !body) return;
 
-    const cfConfig = currentBuilderForm.collegeFieldsConfig || {};
+    // Snapshot unsaved title and description from form builder inputs
+    const titleInp = document.getElementById('builderTitle');
+    const descInp = document.getElementById('builderDesc');
+    const activeTitle = (titleInp && titleInp.value.trim()) || currentBuilderForm.title || 'Customer Feedback';
+    const activeDesc = descInp ? descInp.value.trim() : (currentBuilderForm.description || '');
+
+    // Snapshot unsaved college fields config checkboxes
+    const cfConfig = {
+      departmentEnabled: document.getElementById('cfgDept')?.checked ?? currentBuilderForm.collegeFieldsConfig?.departmentEnabled ?? false,
+      departmentRequired: document.getElementById('cfgDept')?.checked ?? currentBuilderForm.collegeFieldsConfig?.departmentRequired ?? false,
+      courseEnabled: document.getElementById('cfgCourse')?.checked ?? currentBuilderForm.collegeFieldsConfig?.courseEnabled ?? false,
+      courseRequired: document.getElementById('cfgCourse')?.checked ?? currentBuilderForm.collegeFieldsConfig?.courseRequired ?? false,
+      academicYearEnabled: document.getElementById('cfgAcadYear')?.checked ?? currentBuilderForm.collegeFieldsConfig?.academicYearEnabled ?? false,
+      academicYearRequired: false,
+      yearOfStudyEnabled: document.getElementById('cfgYearOfStudy')?.checked ?? currentBuilderForm.collegeFieldsConfig?.yearOfStudyEnabled ?? false,
+      yearOfStudyRequired: false,
+      semesterEnabled: document.getElementById('cfgSemester')?.checked ?? currentBuilderForm.collegeFieldsConfig?.semesterEnabled ?? false,
+      semesterRequired: false,
+      sectionEnabled: document.getElementById('cfgSection')?.checked ?? currentBuilderForm.collegeFieldsConfig?.sectionEnabled ?? false,
+      sectionRequired: false,
+      facultyEnabled: document.getElementById('cfgFaculty')?.checked ?? currentBuilderForm.collegeFieldsConfig?.facultyEnabled ?? false,
+      facultyRequired: document.getElementById('cfgFaculty')?.checked ?? currentBuilderForm.collegeFieldsConfig?.facultyRequired ?? false,
+      subjectEnabled: document.getElementById('cfgSubject')?.checked ?? currentBuilderForm.collegeFieldsConfig?.subjectEnabled ?? false,
+      subjectRequired: document.getElementById('cfgSubject')?.checked ?? currentBuilderForm.collegeFieldsConfig?.subjectRequired ?? false,
+      categoryEnabled: document.getElementById('cfgCategory')?.checked ?? currentBuilderForm.collegeFieldsConfig?.categoryEnabled ?? false,
+      categoryRequired: false
+    };
     const hasAcademicFields = Object.values(cfConfig).some(Boolean);
+
+    // Snapshot overall rating toggle settings
+    const showOverallRating = document.getElementById('cfgShowOverallRating')
+      ? document.getElementById('cfgShowOverallRating').checked
+      : (currentBuilderForm.overallRatingEnabled !== undefined ? Boolean(currentBuilderForm.overallRatingEnabled) : (currentBuilderForm.showOverallRating !== false));
+    const requireOverallRating = showOverallRating && (document.getElementById('cfgRequireOverallRating')
+      ? document.getElementById('cfgRequireOverallRating').checked
+      : (currentBuilderForm.overallRatingRequired !== undefined ? Boolean(currentBuilderForm.overallRatingRequired) : (currentBuilderForm.requireOverallRating !== false)));
+
+    // Snapshot question list with unsaved edits in DOM input fields
+    const baseQuestions = currentBuilderForm.questions || [];
+    const questions = baseQuestions.map((q, idx) => {
+      const card = document.getElementById(`q-card-${idx}`);
+      let qText = q.text;
+      let qType = q.type;
+      let qReq = q.required;
+      let qOptions = q.options ? [...q.options] : [];
+
+      if (card) {
+        const textInp = card.querySelector('input.form-input[oninput*="updateQuestionField"]');
+        if (textInp && textInp.value !== undefined) {
+          qText = textInp.value;
+        }
+        const typeSel = card.querySelector('select.form-select[onchange*="updateQuestionField"]');
+        if (typeSel && typeSel.value) {
+          qType = typeSel.value;
+        }
+        const reqInp = card.querySelector(`#req_${idx}`);
+        if (reqInp) {
+          qReq = reqInp.checked;
+        }
+        const optInputs = card.querySelectorAll('input.form-input[oninput*="updateQuestionChoice"]');
+        if (optInputs && optInputs.length > 0) {
+          qOptions = Array.from(optInputs).map(inp => inp.value);
+        }
+      }
+
+      return {
+        ...q,
+        text: qText,
+        type: qType,
+        required: qReq,
+        options: qOptions
+      };
+    });
+
+    const isPublished = currentBuilderForm.status === 'published';
+    const statusLabel = (currentBuilderForm.status || 'draft').toUpperCase();
 
     body.innerHTML = `
       <div style="background:#ffffff; border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--neutral-200);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+          <span class="badge ${isPublished ? 'badge-success' : 'badge-warning'}" style="font-size:0.75rem;">
+            ${escapeHtml(statusLabel)} PREVIEW
+          </span>
+          <span style="font-size:0.75rem; color:var(--neutral-500);">📱 In-App Mobile Simulator</span>
+        </div>
+
         <div style="text-align: center; margin-bottom: 20px;">
           <div style="font-size: 2.2rem; margin-bottom: 6px;">⚡</div>
-          <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 4px;">${escapeHtml(currentBuilderForm.title)}</h3>
-          <p class="text-muted text-sm">${escapeHtml(currentBuilderForm.description || '')}</p>
+          <h3 id="previewFormTitle" style="font-size: 1.2rem; font-weight: 700; margin-bottom: 4px;">${escapeHtml(activeTitle)}</h3>
+          <p id="previewFormDesc" class="text-muted text-sm">${escapeHtml(activeDesc)}</p>
         </div>
 
         ${hasAcademicFields ? `
@@ -1519,7 +1735,7 @@ const app = (function () {
               ${cfConfig.departmentEnabled ? `
                 <select class="form-select" style="min-height: 36px; font-size: 0.85rem;">
                   <option>-- Select Department --</option>
-                  <option>Computer Science & Engineering</option>
+                  <option>Computer Science &amp; Engineering</option>
                   <option>Information Technology</option>
                 </select>
               ` : ''}
@@ -1538,21 +1754,33 @@ const app = (function () {
               ${cfConfig.subjectEnabled ? `
                 <select class="form-select" style="min-height: 36px; font-size: 0.85rem;">
                   <option>-- Select Subject --</option>
-                  <option>Data Structures & Algorithms</option>
+                  <option>Data Structures &amp; Algorithms</option>
                 </select>
               ` : ''}
             </div>
           </div>
         ` : ''}
 
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-          ${(currentBuilderForm.questions || []).map((q, i) => `
-            <div style="border-bottom: 1px solid var(--neutral-100); padding-bottom: 14px;">
+        ${showOverallRating ? `
+          <div style="background-color: var(--neutral-50); padding: 14px; border-radius: var(--radius-md); margin-bottom: 16px; border: 1px solid var(--neutral-200); text-align: center;">
+            <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; color: var(--neutral-800);">
+              Overall Experience Rating ${requireOverallRating ? '<span style="color:red">*</span>' : '<span style="font-size:0.8rem; font-weight:normal; color:var(--neutral-500);">(Optional)</span>'}
+            </div>
+            <div style="font-size: 1.8rem; color: #f59e0b; letter-spacing: 4px; cursor: default;">
+              ★★★★★
+            </div>
+            <div style="font-size: 0.8rem; color: var(--neutral-500); margin-top: 4px;">Tap a star to rate (1 - 5)</div>
+          </div>
+        ` : ''}
+
+        <div id="previewQuestionsContainer" style="display: flex; flex-direction: column; gap: 16px;">
+          ${questions.map((q, i) => `
+            <div class="preview-question-item" style="border-bottom: 1px solid var(--neutral-100); padding-bottom: 14px;">
               <div style="font-weight: 600; font-size: 0.92rem; margin-bottom: 8px; color: var(--neutral-800);">
-                ${i + 1}. ${escapeHtml(q.text)} ${q.required ? '<span style="color:red">*</span>' : ''}
+                ${i + 1}. <span class="preview-q-text">${escapeHtml(q.text)}</span> ${q.required ? '<span style="color:red">*</span>' : ''}
                 ${q.conditional && q.conditional.dependsOn ? `<span style="font-size: 0.72rem; color: var(--primary); margin-left: 6px;">(Conditional: when ${escapeHtml(q.conditional.dependsOn)} ${escapeHtml(q.conditional.operator)} "${escapeHtml(q.conditional.value)}")</span>` : ''}
               </div>
-              <div>
+              <div class="preview-q-control">
                 ${renderInteractiveControlPreview(q)}
               </div>
             </div>
@@ -1560,18 +1788,43 @@ const app = (function () {
         </div>
 
         <div style="margin-top: 20px;">
-          <button type="button" class="btn btn-primary btn-block" style="min-height: 44px; font-weight: 600;">
-            Submit Feedback
+          <button type="button" class="btn btn-primary btn-block" style="min-height: 44px; font-weight: 600;" onclick="app.showToast('Interactive preview only — responses are not stored in preview mode.', 'info')">
+            Submit Feedback (Preview)
           </button>
         </div>
       </div>
     `;
 
+    // Update modal footer status badge and live public link
+    const statusBadge = document.getElementById('previewModalStatusBadge');
+    if (statusBadge) {
+      statusBadge.className = `badge ${isPublished ? 'badge-success' : 'badge-warning'}`;
+      statusBadge.textContent = `Status: ${statusLabel}${isPublished ? '' : ' (Draft Preview)'}`;
+    }
+
+    const liveLink = document.getElementById('previewModalLiveLink');
+    if (liveLink) {
+      const urlInfo = getPublicFormUrl(currentBuilderForm);
+      if (urlInfo && urlInfo.isPublished && urlInfo.url) {
+        liveLink.href = urlInfo.url;
+        liveLink.style.display = 'inline-flex';
+        liveLink.target = '_blank';
+        liveLink.onclick = null;
+      } else {
+        liveLink.style.display = 'none';
+      }
+    }
+
     modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
   }
 
   function closePreviewModal() {
-    document.getElementById('previewModal')?.classList.remove('active');
+    const modal = document.getElementById('previewModal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function showQrForCurrentForm() {
@@ -2346,7 +2599,10 @@ const app = (function () {
     saveAcademicConfig,
     toggleSettingsAddress,
     toggleRegisterAddress,
-    toggleBusinessStatus
+    toggleBusinessStatus,
+    getPublicFormUrl,
+    syncHeaderPublicFormLink,
+    updateBuilderOpenBtn
   };
 })();
 

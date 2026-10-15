@@ -24,6 +24,7 @@
     "test:phase15": "node tests/phase15-sentiment-security-and-release-tests.js",
     "test:qr": "node tests/qr-standards-tests.js",
     "test:profile": "node tests/profile-modal-browser-test.js",
+    "test:preview": "node tests/form-preview-and-slug-tests.js",
     "test:integration": "node tests/real-mongo-integration-test.js",
     "test:smoke": "node tests/smoke-test-final.js",
     "verify:release": "node tests/verify-release.js",

@@ -289,14 +289,44 @@ router.get('/templates', requireAuth, (req, res) => {
 // GET /api/forms/slug/:slug (PUBLIC ENDPOINT)
 router.get('/slug/:slug', async (req, res) => {
   try {
-    const form = await db.getFormBySlug(req.params.slug);
+    const rawSlug = req.params.slug;
+    if (!rawSlug || typeof rawSlug !== 'string') {
+      return res.status(400).json({ error: 'Slug parameter is required' });
+    }
+    const slug = rawSlug.trim().toLowerCase();
+
+    // Reject MongoDB ObjectId patterns (24-character hex strings) as public slugs
+    if (/^[0-9a-fA-F]{24}$/.test(slug)) {
+      console.warn(`[Public Form Lookup] Rejected MongoDB ObjectId as public slug: "${slug}"`);
+      return res.status(404).json({
+        error: 'Feedback form not found',
+        reason: 'invalid_slug_type',
+        message: 'Public forms must be accessed via form slug, not internal database ID.'
+      });
+    }
+
+    const form = await db.getFormBySlug(slug);
     if (!form) {
-      return res.status(404).json({ error: 'Feedback form not found' });
+      console.warn(`[Public Form Lookup] Form slug not found in database: "${slug}"`);
+      return res.status(404).json({
+        error: 'Feedback form not found',
+        reason: 'not_found',
+        message: `No active feedback form matches slug "${slug}".`
+      });
     }
 
     if (form.status !== 'published') {
+      console.info(`[Public Form Lookup] Inactive form requested: "${form.slug}" (status: ${form.status})`);
       return res.status(403).json({
-        error: `This feedback form is currently ${form.status} and is not accepting responses.`
+        status: form.status,
+        formTitle: form.title,
+        slug: form.slug,
+        error: `This feedback form is currently ${form.status} and is not accepting responses.`,
+        message: form.status === 'draft'
+          ? `The form "${form.title}" is in draft status and has not been published yet. Administrators can publish it from Form Builder.`
+          : form.status === 'paused'
+          ? `The form "${form.title}" is currently paused by the administrator and is not accepting new submissions.`
+          : `The form "${form.title}" has been archived and is no longer accepting submissions.`
       });
     }
 

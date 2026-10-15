@@ -117,7 +117,15 @@ async function handleSubmit(req, res) {
 
     let form = null;
     if (slug) {
-      form = await db.getFormBySlug(slug);
+      const cleanSlug = slug.trim().toLowerCase();
+      // MongoDB ObjectIds are never valid public slugs
+      if (/^[0-9a-fA-F]{24}$/.test(cleanSlug)) {
+        return res.status(404).json({
+          error: 'Feedback form not found',
+          message: 'Public submissions must use the form slug, not internal database ID.'
+        });
+      }
+      form = await db.getFormBySlug(cleanSlug);
     } else if (formId) {
       form = await db.getFormById(formId);
     }
@@ -129,6 +137,9 @@ async function handleSubmit(req, res) {
     // Form lifecycle check
     if (form.status !== 'published') {
       return res.status(403).json({
+        status: form.status,
+        formTitle: form.title,
+        slug: form.slug,
         error: `This feedback form is currently ${form.status} and is not accepting responses.`
       });
     }

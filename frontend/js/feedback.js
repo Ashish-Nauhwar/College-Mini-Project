@@ -22,10 +22,12 @@
     const path = window.location.pathname;
     const parts = path.split('/').filter(Boolean);
     if (parts.length >= 2 && parts[0] === 'feedback') {
-      return parts[1];
+      return decodeURIComponent(parts[1]).trim();
     }
     const params = new URLSearchParams(window.location.search);
-    return params.get('slug') || 'apex-downtown';
+    const paramSlug = params.get('slug');
+    if (paramSlug) return paramSlug.trim();
+    return '';
   }
 
   async function loadForm() {
@@ -33,12 +35,42 @@
     const loadingEl = document.getElementById('loadingIndicator');
     const errorEl = document.getElementById('errorState');
     const formEl = document.getElementById('publicFeedbackForm');
+    const titleEl = document.getElementById('errorTitle') || errorEl.querySelector('h2');
+    const msgEl = document.getElementById('errorMessage') || errorEl.querySelector('p');
+    const actionsEl = document.getElementById('errorActions');
+
+    if (!slug) {
+      loadingEl.classList.add('hidden');
+      errorEl.classList.remove('hidden');
+      if (titleEl) titleEl.textContent = 'No Form Specified';
+      if (msgEl) msgEl.textContent = 'Please access this page using the complete feedback link or QR code provided by the business or institution.';
+      if (actionsEl) {
+        actionsEl.innerHTML = `<a href="/#/dashboard" class="btn btn-primary">Go to Dashboard</a>`;
+      }
+      return;
+    }
+
+    if (/^[0-9a-fA-F]{24}$/.test(slug)) {
+      loadingEl.classList.add('hidden');
+      errorEl.classList.remove('hidden');
+      if (titleEl) titleEl.textContent = 'Invalid Form Link';
+      if (msgEl) msgEl.textContent = 'Public feedback forms must be accessed via form slug, not an internal database ID.';
+      if (actionsEl) {
+        actionsEl.innerHTML = `<a href="/#/dashboard" class="btn btn-primary">Go to Dashboard</a>`;
+      }
+      return;
+    }
 
     try {
       const res = await fetch(`/api/forms/slug/${encodeURIComponent(slug)}`);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Feedback form not found or inactive');
+        const err = new Error(errData.message || errData.error || 'Feedback form not found or inactive');
+        err.status = res.status;
+        err.formStatus = errData.status;
+        err.formTitle = errData.formTitle;
+        err.slug = errData.slug;
+        throw err;
       }
 
       const data = await res.json();
@@ -99,7 +131,52 @@
     } catch (err) {
       loadingEl.classList.add('hidden');
       errorEl.classList.remove('hidden');
-      document.getElementById('errorMessage').textContent = err.message || 'Unable to load feedback form.';
+
+      if (err.status === 403) {
+        // Form exists in database but is inactive
+        if (titleEl) {
+          if (err.formStatus === 'draft') {
+            titleEl.textContent = '📝 Form In Draft Status (Unpublished)';
+            titleEl.style.color = '#d97706';
+          } else if (err.formStatus === 'paused') {
+            titleEl.textContent = '⏸️ Form Currently Paused';
+            titleEl.style.color = '#d97706';
+          } else if (err.formStatus === 'archived') {
+            titleEl.textContent = '📁 Form Archived';
+            titleEl.style.color = '#475569';
+          } else {
+            titleEl.textContent = 'Form Not Published';
+            titleEl.style.color = '#d97706';
+          }
+        }
+        if (msgEl) {
+          msgEl.textContent = err.message || `This feedback form is currently in ${err.formStatus || 'inactive'} status and is not accepting responses.`;
+        }
+        if (actionsEl) {
+          actionsEl.innerHTML = `
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px;">
+              <a href="/#/builder" class="btn btn-primary">Open Form Builder to Publish</a>
+              <a href="/#/dashboard" class="btn btn-secondary">Go to Dashboard</a>
+            </div>
+          `;
+        }
+      } else {
+        if (titleEl) {
+          titleEl.textContent = 'Unable to Load Form';
+          titleEl.style.color = '#dc2626';
+        }
+        if (msgEl) {
+          msgEl.textContent = err.message || 'The requested feedback form does not exist. Please check the link and try again.';
+        }
+        if (actionsEl) {
+          actionsEl.innerHTML = `
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px;">
+              <button type="button" class="btn btn-secondary" onclick="window.location.reload()">Try Again</button>
+              <a href="/#/dashboard" class="btn btn-primary">Go to Dashboard</a>
+            </div>
+          `;
+        }
+      }
     }
   }
 

@@ -95,6 +95,7 @@ async function verifyRelease() {
     { name: 'Phase 15 Secure Sentiment & Release Verification', file: 'phase15-sentiment-security-and-release-tests.js', requiredLive: false },
     { name: 'QR Standards & Decoding Verification', file: 'qr-standards-tests.js', requiredLive: false },
     { name: 'Profile Modal & Logout Verification', file: 'profile-modal-browser-test.js', requiredLive: false },
+    { name: 'Form Preview, Slug Authority & Status Verification', file: 'form-preview-and-slug-tests.js', requiredLive: false },
     { name: 'Real MongoDB Atlas 16-Step API Integration', file: 'real-mongo-integration-test.js', requiredLive: true },
     { name: 'Final 13-Step Release Smoke Verification', file: 'smoke-test-final.js', requiredLive: true }
   ];

@@ -128,8 +128,9 @@ app.all('/api/*', (req, res) => {
   res.status(404).json({ error: `API endpoint "${req.method} ${req.path}" not found` });
 });
 
-// Public Feedback Form route: /feedback/:slug
-app.get('/feedback/:slug', (req, res) => {
+// Public Feedback Form route: /feedback and /feedback/:slug
+app.get(['/feedback', '/feedback/:slug'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(FRONTEND_DIR, 'feedback.html'));
 });
 
@@ -143,6 +144,7 @@ app.use((req, res, next) => {
 
 // Single Page Application fallback for all dashboard routes
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 

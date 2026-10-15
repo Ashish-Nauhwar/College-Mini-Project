@@ -112,7 +112,7 @@
 
         <div class="header-right">
           <!-- Quick Public Form Preview Link -->
-          <a id="headerPublicFormLink" href="/feedback/apex-downtown" target="_blank" class="btn btn-secondary btn-sm" style="display: none;">
+          <a id="headerPublicFormLink" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: none;" title="Open live public feedback form">
             <span>👁️</span> <span style="display: none; @media(min-width: 600px) { display: inline; }">Live Form</span>
           </a>
 
@@ -520,13 +520,16 @@
               </select>
             </div>
 
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="app.previewCurrentForm()">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="app.previewCurrentForm()" title="Interactive preview modal">
                 👁️ Preview Form
               </button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="app.showQrForCurrentForm()">
                 📱 View QR
               </button>
+              <a id="builderOpenPublicBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: none;" title="Open live public feedback form in new tab">
+                🌐 Open Live Form
+              </a>
               <button type="button" class="btn btn-primary btn-sm" onclick="app.saveCurrentForm()">
                 💾 Save Changes
               </button>
@@ -1028,8 +1031,12 @@
       <div class="modal-body" id="previewModalBody" style="background-color: var(--neutral-50);">
         <!-- Injected by app.js -->
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="app.closePreviewModal()">Close Preview</button>
+      <div class="modal-footer" id="previewModalFooter" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span id="previewModalStatusBadge" class="badge" style="font-size: 0.75rem;">Status: Draft</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <a id="previewModalLiveLink" href="#" target="_blank" class="btn btn-primary btn-sm" style="display: none;">🌐 Open Live Form</a>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="app.closePreviewModal()">Close Preview</button>
+        </div>
       </div>
     </div>
   </div>
